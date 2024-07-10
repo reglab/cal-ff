@@ -43,6 +43,8 @@ dependencies = [
 	"sshtunnel",
 	"scikit-learn",
 	"rl @ git+https://github.com/ProbablyFaiz/rl.git",
+	"rich",
+	"rich-click",
 ]
 
 [project.optional-dependencies]
@@ -70,3 +72,6 @@ packages = ["cacafo"]
 profile = "black"
 src_paths = ["cacafo"]
 skip_gitignore = true
+
+[project.scripts]
+calf = "cacafo.cli:cli"

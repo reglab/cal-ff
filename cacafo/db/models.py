@@ -6,11 +6,9 @@ import shapely as shp
 from playhouse.postgres_ext import JSONField, PostgresqlExtDatabase
 from playhouse.shortcuts import model_to_dict
 
-# from functools import cache
+from cacafo.db.session import get_peewee_connection
 
-db = PostgresqlExtDatabase(
-    "cacafo", user="vim", password="cacafo", host="0.0.0.0", port=55550
-)
+db = get_peewee_connection()
 
 
 class WktField(pw.Field):
