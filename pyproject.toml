@@ -1,0 +1,32 @@
+[project]
+name = "cacafo"
+version = "0.1.0"
+authors = [
+    { name = "Varun Magesh", email = "vim@law.stanford.edu" },
+    { name = "Nic Rothbacker", email = "nsroth@law.stanford.edu" },
+]
+description = "A pipeline to build a dataset of CAFOs in California"
+readme = "README.md"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+requires-python = ">=3.10"
+
+[project.urls]
+homepage = "https://github.com/reglab/cacafo"
+
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["cacafo"]
+
+
+[tool.isort]
+profile = "black"
+src_paths = ["cacafo"]
+skip_gitignore = true
