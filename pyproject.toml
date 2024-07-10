@@ -14,6 +14,43 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
 ]
 requires-python = ">=3.10"
+dependencies = [
+	"isort",
+	"diskcache",
+	"gdown",
+	"tqdm",
+	"pandas",
+	"peewee",
+	"dtlpy",
+	"geopandas",
+	"geopy",
+	"shapely",
+	"numpy",
+	"networkx",
+	"matplotlib",
+	"seaborn",
+	"rasterio",
+	"rapidfuzz",
+	"requests",
+	"statsmodels",
+	"scipy",
+	"urllib",
+	"google-cloud-storage",
+	"google-cloud-auth",
+	"pillow",
+	"mercantile",
+	"contextily",
+	"sshtunnel",
+	"scikit-learn",
+	"rl @ git+https://github.com/ProbablyFaiz/rl.git",
+]
+
+[project.optional-dependencies]
+dev = [
+	"pre-commit",
+	"black[d]",
+	"ipdb",
+]
 
 [project.urls]
 homepage = "https://github.com/reglab/cacafo"
