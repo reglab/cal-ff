@@ -21,6 +21,7 @@ dependencies = [
 	"tqdm",
 	"pandas",
 	"peewee",
+	"psycopg2",
 	"dtlpy",
 	"geopandas",
 	"geopy",
@@ -34,9 +35,8 @@ dependencies = [
 	"requests",
 	"statsmodels",
 	"scipy",
-	"urllib",
 	"google-cloud-storage",
-	"google-cloud-auth",
+	"google-cloud-core",
 	"pillow",
 	"mercantile",
 	"contextily",
@@ -50,6 +50,9 @@ dev = [
 	"pre-commit",
 	"black[d]",
 	"ipdb",
+	"ipython",
+	"ruff",
+	"pgcli",
 ]
 
 [project.urls]
