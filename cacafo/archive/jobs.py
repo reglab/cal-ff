@@ -9,6 +9,7 @@ import sys
 from multiprocessing.pool import ThreadPool
 
 import geopandas as gpd
+import models as m
 import peewee as pw
 import playhouse.sqlite_ext as pwext
 import shapely as shp
@@ -17,7 +18,6 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from tqdm import tqdm
 
 import data
-import models as m
 import naip
 
 

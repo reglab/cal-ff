@@ -17,13 +17,13 @@ import scipy as sp
 import seaborn as sns
 import shapely as shp
 import thefuzz
+from models import *
 from PIL import Image
 from reglab_utils.geo.visualization import add_polygon_layer, create_map
 from statsmodels.stats.proportion import proportion_confint
 from tqdm import tqdm
 
 import naip
-from models import *
 
 FIG_PATH = "figures/"
 

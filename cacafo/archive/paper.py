@@ -9,15 +9,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import peewee as pw
+import recall
 import schemdraw
 import seaborn as sns
+from models import *
 from PIL import Image
 from statsmodels.stats.proportion import proportion_confint
 from tqdm import tqdm
 
 import naip
-import recall
-from models import *
 
 sns.set_palette("Set2")
 sns.set_theme("paper", style="white", font="Times New Roman")
