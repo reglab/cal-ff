@@ -6,7 +6,7 @@ import numpy as np
 import seaborn as sns
 from tqdm import tqdm
 
-import naip
+import cacafo.naip
 
 PROJECT = "RegLab_Prod"
 
@@ -100,9 +100,8 @@ def get_dataset(name):
 
 
 def main():
-    import peewee as pw
-
     import models as m
+    import peewee as pw
 
     images = (
         m.Image.select()
