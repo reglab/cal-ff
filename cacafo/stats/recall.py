@@ -6,10 +6,9 @@ from typing import Union
 import numpy as np
 import pandas as pd
 import peewee as pw
+from models import *
 from scipy.stats import f
 from statsmodels.stats.proportion import proportion_confint
-
-from models import *
 
 
 def bootstrap_recall(strata_df):
