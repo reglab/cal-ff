@@ -3,7 +3,7 @@ name = "cacafo"
 version = "0.1.0"
 authors = [
     { name = "Varun Magesh", email = "vim@law.stanford.edu" },
-    { name = "Nic Rothbacker", email = "nsroth@law.stanford.edu" },
+    { name = "Nic Rothbacher", email = "nsroth@law.stanford.edu" },
 ]
 description = "A pipeline to build a dataset of CAFOs in California"
 readme = "README.md"
@@ -16,6 +16,8 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = [
 	"isort",
+	"gsheets",
+	"pydrive2",
 	"pathlib",
 	"diskcache",
 	"gdown",
