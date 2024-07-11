@@ -49,6 +49,26 @@ def num_facilities():
     return m.Facility.select().count()
 
 
+@check(expected=0)
+def facilities_without_buildings():
+    return (
+        m.Facility.select()
+        .join(m.Building, pw.JOIN.LEFT_OUTER)
+        .where(m.Building.id.is_null())
+        .count()
+    )
+
+
+@check(expected=0)
+def facilities_without_construction_annotations():
+    return (
+        m.Facility.select()
+        .join(m.ConstructionAnnotation, pw.JOIN.LEFT_OUTER)
+        .where(m.ConstructionAnnotation.id.is_null())
+        .count()
+    )
+
+
 @click.command()
 def check():
     for func, expected in checks.items():

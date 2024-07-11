@@ -66,8 +66,10 @@ def sql():
 
 
 from cacafo.check import check
+from cacafo.export import export
 
 cli.add_command(check)
+cli.add_command(export)
 
 if __name__ == "__main__":
     cli()
