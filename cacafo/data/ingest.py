@@ -23,8 +23,10 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from tqdm import tqdm
 
 import cacafo.data.source
-import cacafo.db.models as m
 import cacafo.naip
+
+# TODO fix this import
+from cacafo.db.models import *
 
 
 def check_if_populated(model):
@@ -54,27 +56,29 @@ def ingestor(model):
         INGESTORS[model].append(func)
         return func
 
+    return decorator
 
-@ingestor(m.County)
-@ingestor(m.CountyGroup)
+
+@ingestor(County)
+@ingestor(CountyGroup)
 def counties(overwrite=False, add=False):
-    preflight(m.County, overwrite=overwrite, add=add)
-    preflight(m.CountyGroup, overwrite=overwrite, add=add)
+    preflight(County, overwrite=overwrite, add=add)
+    preflight(CountyGroup, overwrite=overwrite, add=add)
 
     with open(cacafo.data.source.get("California_Counties.csv")) as f:
         counties = list(csv.DictReader(f))
     with open(cacafo.data.source.get("county_groups.csv")) as f:
         reader = csv.DictReader(f)
         county_groups_mappings = {row["County"]: row["Group Name"] for row in reader}
-    m.CountyGroup.bulk_create(
-        [m.CountyGroup(name=name) for name in county_groups_mappings.values]
+    CountyGroup.bulk_create(
+        [CountyGroup(name=name) for name in county_groups_mappings.values]
     )
     county_groups = {
-        name: m.CountyGroup.get(name=name) for name in county_groups_mappings.values()
+        name: CountyGroup.get(name=name) for name in county_groups_mappings.values()
     }
-    m.County.bulk_create(
+    County.bulk_create(
         [
-            m.County(
+            County(
                 name=county["Name"],
                 latitude=county["Latitude"],
                 longitude=county["Longitude"],
@@ -86,9 +90,9 @@ def counties(overwrite=False, add=False):
     )
 
 
-@ingestor(m.Parcel)
+@ingestor(Parcel)
 def parcels(overwrite=False, add=False):
-    preflight(m.Parcel, overwrite=overwrite, add=add)
+    preflight(Parcel, overwrite=overwrite, add=add)
 
     parcel_dirs = (
         cacafo.data.source.get("parcels/polygon-centroids-merge-v2"),
@@ -211,28 +215,28 @@ def permitted_locations(overwrite=False, add=False):
 
 
 def add_parcel_field_to_permits():
-    county_name_to_id = {county.name: county.id for county in m.County.select()}
+    county_name_to_id = {county.name: county.id for county in County.select()}
     parcelnumb_to_id = {
-        (parcel.numb, parcel.county.id): parcel.id for parcel in m.Parcel.select()
+        (parcel.numb, parcel.county.id): parcel.id for parcel in Parcel.select()
     }
     permit_to_permit_data_location = {
         permit["id"]: (permit["latitude"], permit["longitude"])
-        for permit in m.Permit.select(
-            m.Permit.id, m.PermittedLocation.latitude, m.PermittedLocation.longitude
+        for permit in Permit.select(
+            Permit.id, PermittedLocation.latitude, PermittedLocation.longitude
         )
-        .join(m.PermitPermittedLocation)
-        .join(m.PermittedLocation)
-        .where(m.PermitPermittedLocation.source == "permit data")
+        .join(PermitPermittedLocation)
+        .join(PermittedLocation)
+        .where(PermitPermittedLocation.source == "permit data")
         .dicts()
     }
     permit_to_geocoded_location = {
         permit["id"]: (permit["latitude"], permit["longitude"])
-        for permit in m.Permit.select(
-            m.Permit.id, m.PermittedLocation.latitude, m.PermittedLocation.longitude
+        for permit in Permit.select(
+            Permit.id, PermittedLocation.latitude, PermittedLocation.longitude
         )
-        .join(m.PermitPermittedLocation)
-        .join(m.PermittedLocation)
-        .where(m.PermitPermittedLocation.source == "address geocoding")
+        .join(PermitPermittedLocation)
+        .join(PermittedLocation)
+        .where(PermitPermittedLocation.source == "address geocoding")
         .dicts()
     }
     permit_to_location = permit_to_geocoded_location | permit_to_permit_data_location
@@ -243,19 +247,19 @@ def add_parcel_field_to_permits():
     permit_parcel_rows = [
         row for row in csv.DictReader(open(data.get("permits_parcels.csv")))
     ]
-    id_to_permit = {permit.id: permit for permit in m.Permit.select()}
+    id_to_permit = {permit.id: permit for permit in Permit.select()}
     to_create = {}
     for row in permit_parcel_rows:
         if not row["parcelnumb"]:
             continue
         if not row["County"]:
-            county = m.County.geocode(lon=row["Longitude"], lat=row["Latitude"])
+            county = County.geocode(lon=row["Longitude"], lat=row["Latitude"])
             row["County"] = county.name
         if (
             row["parcelnumb"],
             county_name_to_id[row["County"]],
         ) not in parcelnumb_to_id:
-            parcel = m.Parcel(
+            parcel = Parcel(
                 numb=row["parcelnumb"],
                 county=county_name_to_id[row["County"]],
                 owner=row["owner"],
@@ -263,9 +267,9 @@ def add_parcel_field_to_permits():
                 data={k: v for k, v in row.items() if k[0].islower()},
             )
             to_create[(row["parcelnumb"], county_name_to_id[row["County"]])] = parcel
-    m.Parcel.bulk_create(to_create.values())
+    Parcel.bulk_create(to_create.values())
     parcelnumb_to_id = {
-        (parcel.numb, parcel.county.id): parcel.id for parcel in m.Parcel.select()
+        (parcel.numb, parcel.county.id): parcel.id for parcel in Parcel.select()
     }
     to_update = []
     n_locations_not_found = 0
@@ -284,8 +288,21 @@ def add_parcel_field_to_permits():
             id_to_permit[permit_id].parcel = parcel_id
             to_update.append(id_to_permit[permit_id])
     print(f"Locations not found: {n_locations_not_found}")
-    m.Permit.bulk_update(to_update, fields=[m.Permit.parcel])
-    return m.Permit.select().where(m.Permit.parcel.is_null()).count()
+    Permit.bulk_update(to_update, fields=[Permit.parcel])
+    return Permit.select().where(Permit.parcel.is_null()).count()
+
+
+def add_facility_field_to_permits():
+    from cacafo.cluster.permits import parcel_then_distance_matches
+
+    facility_to_permits = parcel_then_distance_matches()
+    permits = {permit.id: permit for permit in Permit.select()}
+    to_update = []
+    for facility, permit_ids in facility_to_permits.items():
+        for permit_id in permit_ids:
+            permits[permit_id].facility = facility
+            to_update.append(permits[permit_id])
+    Permit.bulk_update(to_update, fields=[Permit.facility])
 
 
 @ingestor(Permit)

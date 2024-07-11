@@ -65,5 +65,9 @@ def sql():
     subprocess.run(["pgcli", get_postgres_uri()], check=True)
 
 
+from cacafo.check import check
+
+cli.add_command(check)
+
 if __name__ == "__main__":
     cli()
