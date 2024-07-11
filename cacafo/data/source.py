@@ -384,13 +384,13 @@ GoogleDriveDataSource(
 GoogleDriveFolderDataSource(
     "parcels/polygon-centroids-merge-v2",
     "Polygon centroids matched to parcels",
-    "Parcel csv heading",
+    "folder of csvs with parcel heading",
     "https://drive.google.com/drive/folders/1nDihOmvW2NY92z5aUWscD6Te4efqM-9A?usp=drive_link",
 )
 
 GoogleDriveFolderDataSource(
-    "parcels/afo-permits-geocoded",
+    "afo-permits-geocoded",
     "Parcels matched to permits",
-    "Parcel csv heading",
+    "folder of csvs with permit heading",
     "https://drive.google.com/drive/folders/1LAirMDQEmFgRcznrZTTtyTJ5-D1ifBa5?usp=drive_link",
 )
