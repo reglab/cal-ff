@@ -54,6 +54,12 @@ class County(pw.Model):
                 return county
         raise ValueError(f"No county found for {point}")
 
+    @classmethod
+    def _counties(cls):
+        if not hasattr(cls, "_cache_counties"):
+            cls._cache_counties = list(cls.select())
+        return cls._cache_counties
+
 
 class Facility(pw.Model):
     latitude = pw.DoubleField()

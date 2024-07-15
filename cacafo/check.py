@@ -3,6 +3,7 @@ import rich
 import rich_click as click
 
 import cacafo.db.models as m
+from cacafo.stats.population import estimate_population
 
 checks = {}
 
@@ -67,6 +68,24 @@ def facilities_without_construction_annotations():
         .where(m.ConstructionAnnotation.id.is_null())
         .count()
     )
+
+
+@check(expected=0.9948)
+def image_completeness():
+    pop = estimate_population()
+    num_positive_images = (
+        m.Image.select().join(m.Building).where(m.Building.cafo).distinct().count()
+    )
+    return round(num_positive_images / pop.point, 4)
+
+
+@check(expected=0.8478)
+def completeness_lower_bound():
+    pop = estimate_population()
+    num_positive_images = (
+        m.Image.select().join(m.Building).where(m.Building.cafo).distinct().count()
+    )
+    return round(num_positive_images / pop.upper, 4)
 
 
 @click.command()
