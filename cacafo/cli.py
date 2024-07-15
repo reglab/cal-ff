@@ -65,11 +65,45 @@ def sql():
     subprocess.run(["pgcli", get_postgres_uri()], check=True)
 
 
+@cli.command()
+def tunnel():
+    import os
+    import subprocess
+
+    import requests
+    from rl.utils.io import getenv
+
+    # TODO
+    # curl localhost to see if running
+    # if not, start it
+
+    response = requests.get(f"http://localhost:{getenv('SSH_LOCAL_PORT')}")
+    if response.status_code == 200:
+        click.echo(f"Tunnel already running on port {getenv('SSH_LOCAL_PORT')}")
+        return
+
+    subprocess.Popen(
+        " ".join(
+            [
+                "nohup",
+                "ssh",
+                "-L",
+                f"{getenv('SSH_LOCAL_PORT')}:localhost:{getenv('SSH_REMOTE_PORT')}",
+                "-NT",
+                getenv("SSH_ALIAS"),
+            ]
+        ),
+        shell=True,
+    )
+
+
 from cacafo.check import check
 from cacafo.export import export
+from cacafo.paper import cmd_generate
 
 cli.add_command(check)
 cli.add_command(export)
+cli.add_command(cmd_generate)
 
 if __name__ == "__main__":
     cli()
