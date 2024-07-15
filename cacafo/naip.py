@@ -77,7 +77,7 @@ def download_ca_cafo_naip_image(image_name, format_: Format = Format.JPEG):
 def add_basemap(ax):
     @dc_cache.memoize()
     def get_images_for_area(xmin, ymin, xmax, ymax):
-        from models import Image as mImage
+        from cacafo.db.models import Image as mImage
 
         return mImage.get_images_for_area(xmin, ymin, xmax, ymax)
 

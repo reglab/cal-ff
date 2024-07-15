@@ -6,9 +6,10 @@ from typing import Union
 import numpy as np
 import pandas as pd
 import peewee as pw
-from models import *
 from scipy.stats import f
 from statsmodels.stats.proportion import proportion_confint
+
+from cacafo.db.models import *
 
 
 def bootstrap_recall(strata_df):
@@ -463,7 +464,6 @@ def stratum_f_estimator(
     rescaling_factor = (
         sum((s.weight**2) / s.labeled for s in survey.strata) ** 0.5
     ) / sum(s.weight / (s.labeled**0.5) for s in survey.strata)
-    print(rescaling_factor)
 
     estimate.lower = p_hat - (p_hat - estimate.lower) * rescaling_factor
     estimate.upper = p_hat + (estimate.upper - p_hat) * rescaling_factor
@@ -580,6 +580,11 @@ def number_of_images_per_facility():
     )
     total_facilities = Facility.select().count()
     return total_positive_images / total_facilities
+
+
+def estimate_population():
+    survey = Survey.from_db()
+    return naip_stratum_f_estimator(survey)
 
 
 if __name__ == "__main__":
