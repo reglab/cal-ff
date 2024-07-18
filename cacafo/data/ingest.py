@@ -492,7 +492,7 @@ def facility_animal_types(data_path=None, overwrite=False, add=False):
                     label_source="human",
                 )
             )
-        if row["notes"] == "feedlot":
+        if row["notes"] and "feedlot" in row["notes"]:
             to_create.append(
                 m.FacilityAnimalType(
                     facility=row["facility_id"],
