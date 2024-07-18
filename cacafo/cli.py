@@ -73,14 +73,23 @@ def tunnel():
     import requests
     from rl.utils.io import getenv
 
-    # TODO
-    # curl localhost to see if running
-    # if not, start it
-
-    response = requests.get(f"http://localhost:{getenv('SSH_LOCAL_PORT')}")
-    if response.status_code == 200:
-        click.echo(f"Tunnel already running on port {getenv('SSH_LOCAL_PORT')}")
-        return
+    try:
+        proc = subprocess.run(
+            f"curl localhost:{getenv('SSH_LOCAL_PORT')}".split(),
+            check=True,
+            timeout=1,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except subprocess.CalledProcessError as e:
+        match e.returncode:
+            case 7:
+                pass
+            case 52:
+                print(f"Tunnel is already running on port {getenv('SSH_LOCAL_PORT')}")
+                return
+            case _:
+                raise ValueError(f"Tunnel is in weird state: {e}")
 
     subprocess.Popen(
         " ".join(
