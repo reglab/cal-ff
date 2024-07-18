@@ -15,6 +15,7 @@ from pathlib import Path
 import geopandas as gpd
 import peewee as pw
 import rasterio
+import rich_click as click
 import shapely as shp
 import sshtunnel
 from playhouse.postgres_ext import JSONField, PostgresqlExtDatabase
@@ -23,6 +24,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from tqdm import tqdm
 
 import cacafo.data.source
+import cacafo.db.models as m
 import cacafo.naip
 
 # TODO fix this import
@@ -411,3 +413,120 @@ def permits(overwrite=False, add=False):
         ]
 
     add_parcel_field_to_permits()
+
+
+@ingestor(FacilityAnimalType)
+def facility_animal_types(data_path=None, overwrite=False, add=False):
+    preflight(FacilityAnimalType, overwrite=overwrite, add=add)
+    csv_paths = []
+    if data_path is None:
+        csv_paths = [
+            cacafo.data.source.get(file)
+            for file in cacafo.data.source.list()
+            if "new_animal_typing/" in file
+        ]
+    else:
+        if os.path.exists(data_path):
+            csv_paths = [data_path]
+        else:
+            csv_paths = [cacafo.data.source.get(data_path)]
+    animal_types = {at.name: at.id for at in m.AnimalType.select()}
+    animal_types["cattle"] = animal_types["cows"]
+    animal_types["swine"] = animal_types["pigs"]
+    rows = []
+    for file in csv_paths:
+        with open(file, "r") as f:
+            reader = csv.DictReader(f)
+            rows.extend(list(reader))
+
+    from cacafo.geom import clean_facility_geometry
+
+    facilities = {
+        facility.id: facility
+        for facility in pw.prefetch(
+            m.Facility.select()
+            .join(m.Building, on=(m.Facility.id == m.Building.facility_id))
+            .distinct(),
+            m.Building.select(),
+        )
+    }
+    facility_uuid_to_id = {
+        str(facility.uuid): facility.id for facility in facilities.values()
+    }
+    # do bounding box
+    facilities = {
+        int(k): clean_facility_geometry(v).convex_hull for k, v in facilities.items()
+    }
+    ids = sorted(facilities.keys())
+    geoms = [f[1] for f in sorted(facilities.items(), key=lambda x: x[0])]
+    tree = shp.STRtree(geoms)
+    to_create = []
+    for row in rows:
+        if row["uuid"] in facility_uuid_to_id:
+            row["facility_id"] = facility_uuid_to_id[row["uuid"]]
+        else:
+            lon = row.get("longitude", row.get("lon"))
+            lat = row.get("latitude", row.get("lat"))
+            latlon = shp.geometry.Point((float(lon), float(lat)))
+            outputs = tree.query(latlon, predicate="intersects")
+            if len(outputs) == 0:
+                print(f"Facility not found: {row}")
+                continue
+            if len(outputs) > 1:
+                print(f"Facility ambiguous: {row}")
+                continue
+            row["facility_id"] = ids[outputs[0]]
+        if row["isAFO?"].strip() == "n":
+            to_create.append(
+                m.FacilityAnimalType(
+                    facility=row["facility_id"],
+                    animal_type=animal_types["not afo"],
+                    label_source="human",
+                )
+            )
+        if row["isCAFO?"].strip() == "n":
+            to_create.append(
+                m.FacilityAnimalType(
+                    facility=row["facility_id"],
+                    animal_type=animal_types["not cafo"],
+                    label_source="human",
+                )
+            )
+        if row["notes"] == "feedlot":
+            to_create.append(
+                m.FacilityAnimalType(
+                    facility=row["facility_id"],
+                    animal_type=animal_types["feedlot"],
+                    label_source="human",
+                )
+            )
+        if row["subtype"]:
+            to_create.append(
+                m.FacilityAnimalType(
+                    facility=row["facility_id"],
+                    animal_type=animal_types[row["subtype"].strip()],
+                    label_source="human",
+                )
+            )
+        if row["animal type"]:
+            if row["animal type"] not in animal_types:
+                animal_type = m.AnimalType(name=row["animal type"].strip())
+                animal_type.save()
+                animal_types[row["animal type"]] = animal_type.id
+            to_create.append(
+                m.FacilityAnimalType(
+                    facility=row["facility_id"],
+                    animal_type=animal_types[row["animal type"]],
+                    label_source="human",
+                )
+            )
+    # remove duplicates within to_create
+    to_create = list(
+        {(fat.facility_id, fat.animal_type_id): fat for fat in to_create}.values()
+    )
+    # remove all existing animal types for these facilities, because they are superceded
+    m.FacilityAnimalType.delete().where(
+        m.FacilityAnimalType.facility_id.in_([fat.facility_id for fat in to_create])
+    ).execute()
+    m.FacilityAnimalType.bulk_create(to_create)
+    return to_create
