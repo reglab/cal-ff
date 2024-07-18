@@ -43,12 +43,12 @@ def get_building_relationships(
     )
 
 
-def _dict_of_lists(cls, **kwargs):
+def dict_of_lists(**kwargs):
     dol = {
         b[0]: set() for b in Building.select(Building.id).where(Building.cafo).tuples()
     }
     query = get_building_relationships(**kwargs)
-    for br in query.dicts():
+    for br in query:
         try:
             dol[br["building"]].add(br["other_building"])
         except KeyError:
@@ -56,15 +56,13 @@ def _dict_of_lists(cls, **kwargs):
     return dol
 
 
-@classmethod
-def building_graph(cls, **kwargs):
+def building_graph(**kwargs):
     """
     Return a networkx graph of the buildings and their relationships.
     kwargs are passed to get_building_relationships.
     """
-    return nx.from_dict_of_lists(_dict_of_lists(**kwargs))
+    return nx.from_dict_of_lists(dict_of_lists(**kwargs))
 
 
-@classmethod
-def building_clusters(cls, **kwargs):
-    return nx.connected_components(cls.graph(**kwargs))
+def building_clusters(**kwargs):
+    return nx.connected_components(building_graph(**kwargs))
