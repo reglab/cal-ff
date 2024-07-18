@@ -179,10 +179,13 @@ class GoogleSheetsDataSource(DataSource):
         sheet = sheets.get(self.share_url)
         worksheet = sheet.sheets[0]
         if self.worksheet_title:
+            worksheet = None
             for ws in sheet.sheets:
                 if ws.title == self.worksheet_title:
                     worksheet = ws
                     break
+            if worksheet is None:
+                raise ValueError(f"Worksheet {self.worksheet_title} not found")
         os.makedirs(os.path.dirname(self.path()), exist_ok=True)
         worksheet.to_csv(self.path())
 
@@ -364,6 +367,7 @@ for worksheet in (
     "facilities_w_no_animal_type_or_permit_v2",
     "facilities_still_without_animal_types",
     "facilities_w_two_or_more_types",
+    "animal_typing_2024-06-10",
 ):
     GoogleSheetsDataSource(
         f"new_animal_typing/{worksheet}.csv",
