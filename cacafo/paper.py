@@ -7,6 +7,7 @@ from functools import cache
 from glob import glob
 from pathlib import Path
 
+import diskcache as dc
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -15,6 +16,7 @@ import peewee as pw
 import rich_click as click
 import rl.utils.io
 import seaborn as sns
+from matplotlib_scalebar.scalebar import ScaleBar
 from PIL import Image
 from statsmodels.stats.proportion import proportion_confint
 from tqdm import tqdm
@@ -32,6 +34,8 @@ plt.rcParams["text.usetex"] = False
 plt.rcParams["text.latex.preamble"] = r"\usepackage{mathptmx}\usepackage{amsmath}"
 
 BOOTSTRAP_ITERS = 5000
+
+facility_cluster_cache = dc.Cache("facility_cluster_cache")
 
 
 class PaperMethod(abc.ABC):
@@ -129,23 +133,23 @@ class FigureMethod(PaperMethod):
     path = Path("figures")
 
     def __call__(self):
-        if self.cache and hasattr(self, "_fig"):
-            return self._fig
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        plt.sca(ax)
+        # fig = plt.figure()
+        # ax = fig.add_subplot(111)
+        # plt.sca(ax)
         self.method()
-        self._fig = fig
-        self._ax = ax
-        return self._fig
+        # fig.tight_layout()
+        # self._fig = fig
+        # self._ax = ax
+        # return self._fig
 
     def save(self, path):
         path = str(path)
-        fig = self()
-        fig.savefig(
+        self()
+        plt.savefig(
             path,
             bbox_inches="tight",
         )
+        plt.close()
 
     def paths(self):
         return [
@@ -347,18 +351,9 @@ def permitted_by_animal_type():
     )
     counts = pd.DataFrame(counts)
     sorted_counts = counts.sort_values("permitted_count", ascending=False)
-    # add a total row to the bottom
-    total_row = pd.Series(
-        {
-            "animal_type": "Total",
-            "permitted_count": sorted_counts["permitted_count"].sum(),
-            "unpermitted_count": sorted_counts["unpermitted_count"].sum(),
-            "total_count": sorted_counts["total_count"].sum(),
-        }
+    sorted_counts["animal_type"] = sorted_counts["animal_type"].apply(
+        lambda s: s.title()
     )
-    sorted_counts = pd.concat([sorted_counts, pd.DataFrame([total_row])])
-
-    # rename columns
     sorted_counts = sorted_counts.rename(
         columns={
             "animal_type": "Animal Type",
@@ -447,6 +442,7 @@ def map_facility_counts_by_county():
         legend_kwds={"label": "Permitted Facilities"},
         edgecolor="white",
         linewidth=0.3,
+        alpha=0.5,
     )
     plt.title("Permitted Facilities by County")
     plt.axis("off")
@@ -535,96 +531,6 @@ def map_facility_locations():
 
     plt.title("Facility Detections")
     base.set_axis_off()
-
-
-# @figure()
-def number_of_facilities_over_time():
-    facilities = pd.DataFrame(
-        {
-            "year": range(1993, 2024),
-        }
-    )
-    facilities["count"] = facilities["year"].apply(
-        lambda x: Facility.select()
-        .join(ConstructionAnnotation)
-        .where(
-            (
-                (ConstructionAnnotation.construction_upper_bound <= x)
-                | ConstructionAnnotation.construction_lower_bound.is_null(True)
-            )
-            & (
-                (ConstructionAnnotation.destruction_lower_bound >= x)
-                | ConstructionAnnotation.destruction_lower_bound.is_null(True)
-            )
-        )
-        .count()
-    )
-    # add more rows to the dataframe with the same years but different counts
-    facilities = pd.concat(
-        [
-            facilities,
-            pd.DataFrame(
-                {
-                    "year": facilities["year"],
-                    "count": facilities["year"].apply(
-                        lambda x: Facility.select()
-                        .join(ConstructionAnnotation)
-                        .where(
-                            (
-                                (ConstructionAnnotation.construction_lower_bound <= x)
-                                | ConstructionAnnotation.construction_lower_bound.is_null(
-                                    True
-                                )
-                            )
-                            & (
-                                (ConstructionAnnotation.destruction_upper_bound >= x)
-                                | ConstructionAnnotation.destruction_upper_bound.is_null(
-                                    True
-                                )
-                            )
-                        )
-                        .count()
-                    ),
-                }
-            ),
-        ]
-    )
-    facilities = facilities.sort_values("year")
-    facilities = facilities.reset_index(drop=True)
-
-    sns.lineplot(
-        data=facilities,
-        x="year",
-        y="count",
-        label="Number of Facilities",
-        estimator="mean",
-        ls="--",
-        linewidth=0.5,
-        legend=False,
-    )
-
-    count = ConstructionAnnotation.select().count()
-    plt.axhline(
-        y=count,
-        color="black",
-        ls="--",
-        linewidth=0.5,
-        alpha=0.3,
-    )
-    # just abive the line
-    plt.text(
-        1992,
-        count + 2,
-        "Total Number of Facilities Detected in 2017",
-        fontsize=6,
-        alpha=0.5,
-    )
-
-    plt.ylim(1960, 2200)
-
-    plt.title("Facility Counts Over Time, 2017 NAIP Cohort")
-    plt.xlabel("Year")
-    plt.ylabel("Number of Facilities")
 
 
 @figure()
@@ -722,44 +628,76 @@ def number_of_destructions_per_year():
 @figure()
 def map_example_permitted_facilities(plot_permits=False):
     permitted_facilities = list(
-        Facility.select(
-            Facility.id,
-        )
+        Facility.cafos()
         .join(
             FacilityPermittedLocation,
         )
         .distinct()
     )
-    random.seed(1)
+    random.seed(5)
     permitted_facilities = random.sample(permitted_facilities, 4)
-    gdfs = [facility.to_gdf() for facility in permitted_facilities]
-    permit_locations = [
-        list(
-            FacilityPermittedLocation.select(
-                PermittedLocation.longitude,
-                PermittedLocation.latitude,
+    permit_locations = []
+    if plot_permits:
+        permit_locations = [
+            list(
+                FacilityPermittedLocation.select(
+                    PermittedLocation.longitude,
+                    PermittedLocation.latitude,
+                )
+                .join(
+                    PermittedLocation,
+                )
+                .where(
+                    FacilityPermittedLocation.facility == pf,
+                )
+                .dicts()
             )
-            .join(
-                PermittedLocation,
-            )
-            .where(
-                FacilityPermittedLocation.facility == pf,
-            )
-            .dicts()
+            for pf in facilities
+        ]
+    map_facilities(permitted_facilities, permit_locations)
+
+
+@figure()
+def map_example_unpermitted_facilities():
+    unpermitted_facilities = list(
+        Facility.cafos()
+        .join(
+            FacilityPermittedLocation,
+            pw.JOIN.LEFT_OUTER,
         )
-        for pf in permitted_facilities
-    ]
+        .where(
+            FacilityPermittedLocation.id.is_null(True),
+        )
+        .distinct()
+    )
+    random.seed(5)
+    unpermitted_facilities = random.sample(unpermitted_facilities, 4)
+    map_facilities(unpermitted_facilities)
+
+
+def map_facilities(facilities, permit_locations=[]):
+    gdfs = [facility.to_gdf() for facility in facilities]
     fig, axes = plt.subplots(2, 2, figsize=(6, 6))
+    if not permit_locations:
+        permit_locations = [None] * len(facilities)
     for i, (ax, gdf, permits) in enumerate(zip(axes.flatten(), gdfs, permit_locations)):
+        gdf.crs = "EPSG:4326"
+        gdf = gdf.to_crs("EPSG:3311")
         gdf.plot(
-            color=sns.color_palette("Set2")[3],
-            alpha=0.6,
+            facecolor="none",
             edgecolor="black",
-            linewidth=0.8,
+            linewidth=4,
             ax=ax,
         )
+        gdf.plot(
+            facecolor="none",
+            edgecolor="red",
+            linewidth=2,
+            ax=ax,
+        )
+        ax.add_artist(ScaleBar(1))
         # add permit detected locations
-        if plot_permits:
+        if permits:
             permit_gdf = gpd.GeoDataFrame(
                 [
                     {
@@ -785,55 +723,6 @@ def map_example_permitted_facilities(plot_permits=False):
                 ax=ax,
             )
 
-        # get longest axis
-        longest_axis = max(
-            ax.get_xlim()[1] - ax.get_xlim()[0],
-            ax.get_ylim()[1] - ax.get_ylim()[0],
-        )
-        # extend each axis to be equal to longest axis
-        ax.set_xlim(
-            ax.get_xlim()[0]
-            - (longest_axis - (ax.get_xlim()[1] - ax.get_xlim()[0])) / 2,
-            ax.get_xlim()[1]
-            + (longest_axis - (ax.get_xlim()[1] - ax.get_xlim()[0])) / 2,
-        )
-        ax.set_ylim(
-            ax.get_ylim()[0]
-            - (longest_axis - (ax.get_ylim()[1] - ax.get_ylim()[0])) / 2,
-            ax.get_ylim()[1]
-            + (longest_axis - (ax.get_ylim()[1] - ax.get_ylim()[0])) / 2,
-        )
-        cacafo.naip.add_basemap(ax)
-        ax.axis("off")
-
-
-@figure()
-def map_example_unpermitted_facilities():
-    unpermitted_facilities = list(
-        Facility.select(
-            Facility.id,
-        )
-        .join(
-            FacilityPermittedLocation,
-            pw.JOIN.LEFT_OUTER,
-        )
-        .where(
-            FacilityPermittedLocation.id.is_null(True),
-        )
-        .distinct()
-    )
-    random.seed(1)
-    unpermitted_facilities = random.sample(unpermitted_facilities, 4)
-    gdfs = [facility.to_gdf() for facility in unpermitted_facilities]
-    fig, axes = plt.subplots(2, 2, figsize=(6, 6))
-    for i, ax in enumerate(axes.flatten()):
-        gdfs[i].plot(
-            color=sns.color_palette("Set2")[3],
-            alpha=0.6,
-            edgecolor="black",
-            linewidth=0.8,
-            ax=ax,
-        )
         # get longest axis
         longest_axis = max(
             ax.get_xlim()[1] - ax.get_xlim()[0],
@@ -1517,7 +1406,7 @@ def parcel_name_overrides():
     return df
 
 
-@cache
+@facility_cluster_cache.memoize()
 def facility_set(**kwargs):
     return [frozenset(f) for f in building_clusters(**kwargs)]
 
@@ -1559,13 +1448,6 @@ def facility_tfidf_relationship():
 
 
 def generate(output_path, items=None):
-    for file in itertools.chain(
-        glob(f"{output_path}/tables/*.tex"),
-        glob(f"{output_path}/figures/png/*.png"),
-        glob(f"{output_path}/figures/eps/*.eps"),
-        glob(f"{output_path}/figures/eps/*.pdf"),
-    ):
-        os.remove(file)
     paper_items = PaperMethod.instances
     if items:
         paper_items = [p for p in paper_items if p.name in items]
@@ -1594,6 +1476,15 @@ def generate(output_path, items=None):
 def cmd_generate(item, output_path):
     if output_path is None:
         output_path = str(rl.utils.io.get_data_path() / "paper")
+
+    if not item:
+        for file in itertools.chain(
+            glob(f"{output_path}/tables/*.tex"),
+            glob(f"{output_path}/figures/png/*.png"),
+            glob(f"{output_path}/figures/eps/*.eps"),
+            glob(f"{output_path}/figures/eps/*.pdf"),
+        ):
+            os.remove(file)
     os.makedirs(output_path, exist_ok=True)
     os.makedirs(os.path.join(output_path, "figures"), exist_ok=True)
     os.makedirs(os.path.join(output_path, "figures", "png"), exist_ok=True)

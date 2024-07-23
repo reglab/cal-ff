@@ -12,6 +12,7 @@ import rasterio.merge
 from google.auth.exceptions import DefaultCredentialsError
 from google.cloud import storage
 from PIL import Image
+from rasterio.crs import CRS
 from tqdm import tqdm
 
 CA_2016_COUNTIES = [
@@ -82,6 +83,11 @@ def add_basemap(ax):
         return mImage.get_images_for_area(xmin, ymin, xmax, ymax)
 
     xmin, xmax, ymin, ymax = ax.axis()
+    # project from 3311 to 4326 if necessary
+    if abs(xmin) > 180:
+        xmin, ymin = rasterio.warp.transform("EPSG:3311", "EPSG:4326", [xmin], [ymin])
+        xmax, ymax = rasterio.warp.transform("EPSG:3311", "EPSG:4326", [xmax], [ymax])
+        xmin, ymin, xmax, ymax = xmin[0], ymin[0], xmax[0], ymax[0]
 
     images = get_images_for_area(xmin, ymin, xmax, ymax)
     names = [image.name for image in images]
@@ -103,6 +109,7 @@ def add_basemap(ax):
     ctx.add_basemap(
         ax,
         source=output_file,
+        crs=CRS.from_epsg(3311) if abs(ax.axis()[0]) > 180 else CRS.from_epsg(4326),
     )
     return ax
 

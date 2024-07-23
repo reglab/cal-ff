@@ -51,7 +51,7 @@ def export_csv(output_path: str):
     rows = [{"county": facility_id_to_county[r["facility_id"]], **r} for r in rows]
     date = datetime.datetime.now().strftime("%Y-%m-%d")
     writer = csv.DictWriter(
-        open(f"outputs/construction_dates_temp_{date}.csv", "w"),
+        open(output_path, "w"),
         fieldnames=rows[0].keys(),
     )
     writer.writeheader()
