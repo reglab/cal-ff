@@ -208,6 +208,16 @@ class Stratum:
         new.label(n=n, positives=positives)
         return new
 
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "unlabeled": self.unlabeled,
+            "labeled": self.labeled,
+            "prevalence": self.prevalence.point,
+            "positive": self.positive,
+            "total": self.total,
+        }
+
     def __str__(self):
         return f"{self.name}: total={self.total}, positive={self.positive}, prevalence={self.prevalence}, population={self.population}, recall={self.recall}"
 
@@ -265,6 +275,19 @@ class Survey:
             )
             strata.append(stratum)
         return cls(strata=strata, post_hoc_positive=post_hoc_positive)
+
+    def to_df(self):
+        strata_dicts = [stratum.to_dict() for stratum in self.strata]
+        post_hoc = {
+            "name": "post hoc",
+            "unlabeled": 0,
+            "labeled": self.post_hoc_positive,
+            "prevalence": 0,
+            "positive": self.post_hoc_positive,
+            "total": 0,
+        }
+        strata_dicts.append(post_hoc)
+        return pd.DataFrame(strata_dicts)
 
     def aggregated(self):
         post_hoc = self.post_hoc_positive

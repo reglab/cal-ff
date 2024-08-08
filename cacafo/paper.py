@@ -499,7 +499,7 @@ def map_facility_locations():
     facility_gdf.crs = "EPSG:4326"
 
     facility_gdf["plot_permit"] = facility_gdf["permitted"].apply(
-        lambda x: "Permit within 1km" if x else "No permit detected"
+        lambda x: "Permit within 1km" if x else "No permit within 1km"
     )
 
     base = facility_gdf.plot(
@@ -507,12 +507,12 @@ def map_facility_locations():
         legend=True,
         markersize=0.07,
         marker="o",
-        alpha=0.3,
+        alpha=0.1,
         categorical=True,
         cmap="Set2",
         vmin=0,
         vmax=8,
-        categories=["Permit within 1km", "No permit detected"],
+        categories=["Permit within 1km", "No permit within 1km"],
         legend_kwds={
             "fontsize": 6,
             "markerscale": 0.5,
@@ -628,7 +628,7 @@ def number_of_destructions_per_year():
 @figure()
 def map_example_permitted_facilities(plot_permits=False):
     permitted_facilities = list(
-        Facility.cafos()
+        Facility.select()
         .join(
             FacilityPermittedLocation,
         )
@@ -660,7 +660,7 @@ def map_example_permitted_facilities(plot_permits=False):
 @figure()
 def map_example_unpermitted_facilities():
     unpermitted_facilities = list(
-        Facility.cafos()
+        Facility.select()
         .join(
             FacilityPermittedLocation,
             pw.JOIN.LEFT_OUTER,
@@ -745,549 +745,26 @@ def map_facilities(facilities, permit_locations=[]):
         ax.axis("off")
 
 
-def map_clustering_example():
-    fig, axes = plt.subplots(2, 2, figsize=(6, 6))
-
-    facility = (
-        Facility.select()
-        .join(Building)
-        .group_by(Facility)
-        .having((pw.fn.COUNT(Building.id) > 10) & (pw.fn.COUNT(Building.id) < 20))
-        .get()
-    )
-    gdf = facility.to_gdf()
-    for a in axes.flatten():
-        gdf.plot(ax=a, linewidth=0.8)
-
-    # get building relationships for the facility
-    OtherBuilding = Building.alias()
-    building_relationships = list(
-        BuildingRelationship.select(
-            Building.latitude.alias("latitude"),
-            Building.longitude.alias("longitude"),
-            OtherBuilding.latitude.alias("other_latitude"),
-            OtherBuilding.longitude.alias("other_longitude"),
-            OtherBuilding.id.alias("other_building"),
-            BuildingRelationship.weight,
-            BuildingRelationship.reason,
-        )
-        .join(Building, on=BuildingRelationship.building == Building.id)
-        .join(OtherBuilding, on=BuildingRelationship.other_building == OtherBuilding.id)
-        .where(Building.facility == facility)
-        .dicts()
-    )
-    other_facilities = list(
-        Facility.select()
-        .join(Building)
-        .where(Building.id.in_([br["other_building"] for br in building_relationships]))
-        .distinct()
-    )
-    # plot other facilities in other colors
-    for color, other_facility in zip(sns.color_palette("Set2")[1:], other_facilities):
-        gdf = other_facility.to_gdf()
-        for a in axes.flatten():
-            gdf.plot(ax=a, color=color, linewidth=0.8)
-
-    # turn off axis ticks
-    for a in axes.flatten():
-        a.get_xaxis().set_ticks([])
-        a.get_yaxis().set_ticks([])
-
-    reason_to_axis = {
-        "matching parcel": axes[0, 0],
-        "distance": axes[0, 1],
-        "parcel name tf-idf": axes[1, 0],
-        "parcel name fuzzy": axes[1, 1],
-    }
-    reason_thresholds = {
-        "matching parcel": -1,
-        "distance": 400,
-        "parcel name tf-idf": 700,
-        "parcel name fuzzy": 600,
-    }
-    for relationship in building_relationships:
-        reason_to_axis[relationship["reason"]].plot(
-            [relationship["longitude"], relationship["other_longitude"]],
-            [relationship["latitude"], relationship["other_latitude"]],
-            color=(
-                "black"
-                if (relationship["weight"] is None)
-                or (relationship["weight"] > reason_thresholds[relationship["reason"]])
-                else "red"
-            ),
-            alpha=(relationship["weight"] or 1000) / 10000,
-        )
-    owner_names = list(
-        Parcel.select(Parcel.owner)
-        .join(Building)
-        .join(Facility)
-        .where(Facility.id.in_([facility.id] + [of.id for of in other_facilities]))
-        .distinct()
-        .dicts()
-    )
-    # add titles to each axis
-    reason_to_axis["parcel name tf-idf"].set_title("Parcel Owner Name TF-IDF")
-    reason_to_axis["parcel name fuzzy"].set_title("Parcel Owner Name Fuzzy Matching")
-    reason_to_axis["matching parcel"].set_title("Matching Parcel")
-    reason_to_axis["distance"].set_title("Distance")
-
-
-@table()
-def recall():
-    _Image = Image.alias()
-    images_with_buildings = _Image.select(_Image.id).join(Building).distinct()
-
-    unlabeled_image = Image.label_status == "unlabeled"
-    post_hoc_image = (Image.label_status == "post hoc permit") | (
-        Image.label_status == "adjacent"
-    )
-    unsampled_image = unlabeled_image | post_hoc_image
-    sampled_image = Image.label_status == "active learner"
-
-    positive_image = images_with_buildings.c.id.is_null(False)
-    sampled_positive_image = sampled_image & positive_image
-
-    query = (
-        Image.select(
-            Image.bucket,
-            pw.fn.SUM(
-                pw.Case(
-                    None,
-                    [(unlabeled_image, 1)],
-                    0,
-                )
-            ).alias("unlabeled"),
-            pw.fn.SUM(
-                pw.Case(
-                    None,
-                    [(unsampled_image, 1)],
-                    0,
-                )
-            ).alias("unsampled"),
-            pw.fn.SUM(
-                pw.Case(
-                    None,
-                    [(sampled_image, 1)],
-                    0,
-                )
-            ).alias("sampled"),
-            pw.fn.SUM(
-                pw.Case(
-                    None,
-                    [(post_hoc_image, 1)],
-                    0,
-                )
-            ).alias("post_hoc_labeled"),
-            pw.fn.SUM(
-                pw.Case(
-                    None,
-                    [(sampled_positive_image, 1)],
-                    0,
-                )
-            ).alias("sampled_positive"),
-            pw.fn.SUM(
-                pw.Case(
-                    None,
-                    [
-                        (
-                            positive_image,
-                            1,
-                        )
-                    ],
-                    0,
-                )
-            ).alias("positive"),
-            pw.fn.COUNT("*").alias("total"),
-        )
-        .join(
-            images_with_buildings,
-            pw.JOIN.LEFT_OUTER,
-            on=(Image.id == images_with_buildings.c.id),
-        )
-        .where(Image.label_status != "removed")
-        .group_by(Image.bucket)
-        .order_by(Image.bucket)
-    )
-    df = pd.DataFrame(list(query.dicts()))
-
-    # add total row
-    total_row = pd.Series(
-        {
-            "bucket": "Total",
-            "unlabeled": df["unlabeled"].sum(),
-            "unsampled": df["unsampled"].sum(),
-            "sampled": df["sampled"].sum(),
-            "post_hoc_labeled": df["post_hoc_labeled"].sum(),
-            "sampled_positive": df["sampled_positive"].sum(),
-            "positive": df["positive"].sum(),
-            "total": df["total"].sum(),
-        }
-    )
-    df = pd.concat([df, pd.DataFrame([total_row])])
-
-    df["sampled_prevalence_lower"] = df.apply(
-        lambda x: proportion_confint(
-            x["sampled_positive"], x["sampled"], method="beta"
-        )[0],
-        axis=1,
-    )
-    df["sampled_prevalence"] = df["sampled_positive"] / df["sampled"]
-    df["sampled_prevalence_upper"] = df.apply(
-        lambda x: proportion_confint(
-            x["sampled_positive"], x["sampled"], method="beta"
-        )[1],
-        axis=1,
-    )
-
-    df["population_estimate_lower"] = (
-        df["sampled_prevalence_lower"] * df["unlabeled"] + df["sampled_positive"]
-    )
-    df["population_estimate"] = (
-        df["sampled_prevalence"] * df["unlabeled"] + df["sampled_positive"]
-    )
-    df["population_estimate_upper"] = (
-        df["sampled_prevalence_upper"] * df["unlabeled"] + df["sampled_positive"]
-    )
-
-    for estimate in [
-        "population_estimate_lower",
-        "population_estimate",
-        "population_estimate_upper",
-    ]:
-        df.loc[df["bucket"] == "Total", estimate] = 0
-        df.loc[df["bucket"] == "Total", estimate] = sum(df[estimate])
-
-    # bootstrap sum
-    unsampled_buckets = df[(df["unsampled"] > 0) & (df["bucket"] != "Total")]
-    sampled_buckets = df[(df["unsampled"] == 0) & (df["bucket"] != "Total")]
-    other_totals = sum(sampled_buckets["positive"])
-    trials = [
-        np.random.binomial(
-            row["sampled"],
-            row["sampled_prevalence"],
-            size=BOOTSTRAP_ITERS,
-        )
-        for _, row in unsampled_buckets.iterrows()
-    ]
-    population_estimates = sum(
-        [
-            row["unlabeled"] * trial / row["sampled"] + row["positive"]
-            for trial, (_, row) in zip(trials, unsampled_buckets.iterrows())
-        ]
-    )
-    population_estimates += other_totals
-    df.loc[df["bucket"] == "Total", "population_estimate_lower"] = np.percentile(
-        population_estimates,
-        2.5,
-    )
-    df.loc[df["bucket"] == "Total", "population_estimate_upper"] = np.percentile(
-        population_estimates,
-        97.5,
-    )
-
-    df["recall_lower"] = df["positive"] / df["population_estimate_upper"]
-    df["recall"] = df["positive"] / df["population_estimate"]
-    df["recall_upper"] = df["positive"] / df["population_estimate_lower"]
-
-    # round floats to 3 decimal places and population estimates to integers
-    for col in [
-        "sampled_prevalence_lower",
-        "sampled_prevalence",
-        "sampled_prevalence_upper",
-        "population_estimate_lower",
-        "population_estimate",
-        "population_estimate_upper",
-        "recall_lower",
-        "recall",
-        "recall_upper",
-    ]:
-        df[col] = df[col].apply(lambda x: round(x, 3))
-    for col in [
-        "unlabeled",
-        "unsampled",
-        "sampled",
-        "post_hoc_labeled",
-        "sampled_positive",
-        "positive",
-        "total",
-    ]:
-        df[col] = df[col].astype(int)
-
-    # consolidate upper, lower, and point estimates into one col, format (upper, point, lower)
-    # 3 decimal places
-    df["Sampled Prevalence"] = df.apply(
-        lambda x: f"({x['sampled_prevalence_upper']:0.3}, {x['sampled_prevalence']:0.3}, {x['sampled_prevalence_lower']:0.3})",
-        axis=1,
-    )
-    df["Population Estimate"] = df.apply(
-        lambda x: f"({x['population_estimate_upper']}, {x['population_estimate']}, {x['population_estimate_lower']})",
-        axis=1,
-    )
-    df["Recall"] = df.apply(
-        lambda x: f"({x['recall_upper']:0.3}, {x['recall']:0.3}, {x['recall_lower']:0.3})",
-        axis=1,
-    )
-    # drop unlabeled, unsampled, sampled, post_hoc_labeled, sampled_positive, positive
-    df = df.drop(
-        columns=[
-            "unlabeled",
-            "unsampled",
-            "sampled",
-            "post_hoc_labeled",
-            "sampled_positive",
-            "positive",
-            "sampled_prevalence_lower",
-            "sampled_prevalence",
-            "sampled_prevalence_upper",
-            "population_estimate_lower",
-            "population_estimate",
-            "population_estimate_upper",
-            "recall_lower",
-            "recall",
-            "recall_upper",
-        ]
-    )
-
-    df = df.rename(
-        columns={
-            "bucket": "Bucket",
-            "unlabeled": "Unlabeled",
-            "unsampled": "Unsampled",
-            "sampled": "Sampled",
-            "post_hoc_labeled": "Post-Hoc Labeled",
-            "sampled_positive": "Sampled Positive",
-            "positive": "Positive",
-            "total": "Total",
-            "sampled_prevalence_lower": "Sampled Prevalence Lower",
-            "sampled_prevalence": "Sampled Prevalence",
-            "sampled_prevalence_upper": "Sampled Prevalence Upper",
-            "population_estimate_lower": "Population Estimate Lower",
-            "population_estimate": "Population Estimate",
-            "population_estimate_upper": "Population Estimate Upper",
-            "recall_lower": "Recall Lower",
-            "recall": "Recall",
-            "recall_upper": "Recall Upper",
-        }
-    )
-    return df
-
-
 @table()
 def labeling():
-    _Image = Image.alias()
-    images_with_buildings = _Image.select(_Image.id).join(Building).distinct()
+    from cacafo.stats.population import Stratum, Survey
 
-    unlabeled_image = Image.label_status == "unlabeled"
-    post_hoc_image = (Image.label_status == "post hoc permit") | (
-        Image.label_status == "adjacent"
+    survey = Survey.from_db()
+    df = survey.to_df()
+    df = df.sort_values("total")
+    df = df.sort_values("positive", ascending=False)
+    df["bucket"] = df["name"].apply(
+        lambda x: r"high confidence \& permit"
+        if "completed" in x
+        else "low confidence"
+        if "1:" in x
+        else "no detection"
     )
-    unsampled_image = unlabeled_image | post_hoc_image
-    sampled_image = Image.label_status == "active learner"
-
-    positive_image = images_with_buildings.c.id.is_null(False)
-    sampled_positive_image = sampled_image & positive_image
-
-    query = (
-        Image.select(
-            Image.bucket,
-            pw.fn.SUM(
-                pw.Case(
-                    None,
-                    [(unlabeled_image, 1)],
-                    0,
-                )
-            ).alias("unlabeled"),
-            pw.fn.SUM(
-                pw.Case(
-                    None,
-                    [(unsampled_image, 1)],
-                    0,
-                )
-            ).alias("unsampled"),
-            pw.fn.SUM(
-                pw.Case(
-                    None,
-                    [(sampled_image, 1)],
-                    0,
-                )
-            ).alias("sampled"),
-            pw.fn.SUM(
-                pw.Case(
-                    None,
-                    [(post_hoc_image, 1)],
-                    0,
-                )
-            ).alias("post_hoc_labeled"),
-            pw.fn.SUM(
-                pw.Case(
-                    None,
-                    [(sampled_positive_image, 1)],
-                    0,
-                )
-            ).alias("sampled_positive"),
-            pw.fn.SUM(
-                pw.Case(
-                    None,
-                    [
-                        (
-                            positive_image,
-                            1,
-                        )
-                    ],
-                    0,
-                )
-            ).alias("positive"),
-            pw.fn.COUNT("*").alias("total"),
-        )
-        .join(
-            images_with_buildings,
-            pw.JOIN.LEFT_OUTER,
-            on=(Image.id == images_with_buildings.c.id),
-        )
-        .where(Image.label_status != "removed")
-        .group_by(Image.bucket)
-        .order_by(Image.bucket)
-    )
-    df = pd.DataFrame(list(query.dicts()))
-
-    # add total row
-    total_row = pd.Series(
-        {
-            "bucket": "Total",
-            "unlabeled": df["unlabeled"].sum(),
-            "unsampled": df["unsampled"].sum(),
-            "sampled": df["sampled"].sum(),
-            "post_hoc_labeled": df["post_hoc_labeled"].sum(),
-            "sampled_positive": df["sampled_positive"].sum(),
-            "positive": df["positive"].sum(),
-            "total": df["total"].sum(),
-        }
-    )
-    df = pd.concat([df, pd.DataFrame([total_row])])
-
-    df["sampled_prevalence_lower"] = df.apply(
-        lambda x: proportion_confint(
-            x["sampled_positive"], x["sampled"], method="beta"
-        )[0],
-        axis=1,
-    )
-    df["sampled_prevalence"] = df["sampled_positive"] / df["sampled"]
-    df["sampled_prevalence_upper"] = df.apply(
-        lambda x: proportion_confint(
-            x["sampled_positive"], x["sampled"], method="beta"
-        )[1],
-        axis=1,
-    )
-
-    df["population_estimate_lower"] = (
-        df["sampled_prevalence_lower"] * df["unlabeled"] + df["positive"]
-    )
-    df["population_estimate"] = (
-        df["sampled_prevalence"] * df["unlabeled"] + df["positive"]
-    )
-    df["population_estimate_upper"] = (
-        df["sampled_prevalence_upper"] * df["unlabeled"] + df["positive"]
-    )
-
-    for estimate in [
-        "population_estimate_lower",
-        "population_estimate",
-        "population_estimate_upper",
-    ]:
-        df.loc[df["bucket"] == "Total", estimate] = 0
-        df.loc[df["bucket"] == "Total", estimate] = sum(df[estimate])
-
-    # bootstrap sum
-    unsampled_buckets = df[(df["unsampled"] > 0) & (df["bucket"] != "Total")]
-    sampled_buckets = df[(df["unsampled"] == 0) & (df["bucket"] != "Total")]
-    other_totals = sum(sampled_buckets["positive"])
-    trials = [
-        np.random.binomial(
-            row["sampled"],
-            row["sampled_prevalence"],
-            size=BOOTSTRAP_ITERS,
-        )
-        for _, row in unsampled_buckets.iterrows()
-    ]
-    population_estimates = sum(
-        [
-            row["unlabeled"] * trial / row["sampled"] + row["positive"]
-            for trial, (_, row) in zip(trials, unsampled_buckets.iterrows())
-        ]
-    )
-    population_estimates += other_totals
-    df.loc[df["bucket"] == "Total", "population_estimate_lower"] = np.percentile(
-        population_estimates,
-        2.5,
-    )
-    df.loc[df["bucket"] == "Total", "population_estimate_upper"] = np.percentile(
-        population_estimates,
-        97.5,
-    )
-
-    df["recall_lower"] = df["positive"] / df["population_estimate_upper"]
-    df["recall"] = df["positive"] / df["population_estimate"]
-    df["recall_upper"] = df["positive"] / df["population_estimate_lower"]
-
-    for col in [
-        "sampled_prevalence_lower",
-        "sampled_prevalence",
-        "sampled_prevalence_upper",
-        "population_estimate_lower",
-        "population_estimate",
-        "population_estimate_upper",
-        "recall_lower",
-        "recall",
-        "recall_upper",
-    ]:
-        df[col] = df[col].apply(lambda x: round(x, 3))
-    for col in [
-        "unlabeled",
-        "unsampled",
-        "sampled",
-        "post_hoc_labeled",
-        "sampled_positive",
-        "positive",
-        "total",
-    ]:
-        df[col] = df[col].astype(int)
-
-    # drop all float cols
-    df = df.drop(
-        columns=[
-            "sampled_prevalence_lower",
-            "sampled_prevalence",
-            "sampled_prevalence_upper",
-            "population_estimate_lower",
-            "population_estimate",
-            "population_estimate_upper",
-            "recall_lower",
-            "recall",
-            "recall_upper",
-        ]
-    )
-
-    df = df.rename(
-        columns={
-            "bucket": "Bucket",
-            "unlabeled": "Unlabeled",
-            "unsampled": "Unsampled",
-            "sampled": "Sampled",
-            "post_hoc_labeled": "Post-Hoc Labeled",
-            "sampled_positive": "Sampled Positive",
-            "positive": "Positive",
-            "total": "Total",
-            "sampled_prevalence_lower": "Sampled Prevalence Lower",
-            "sampled_prevalence": "Sampled Prevalence",
-            "sampled_prevalence_upper": "Sampled Prevalence Upper",
-            "population_estimate_lower": "Population Estimate Lower",
-            "population_estimate": "Population Estimate",
-            "population_estimate_upper": "Population Estimate Upper",
-            "recall_lower": "Recall Lower",
-            "recall": "Recall",
-            "recall_upper": "Recall Upper",
-        }
-    )
+    df["name"] = df["name"].apply(lambda x: x.replace("0:", ""))
+    df["name"] = df["name"].apply(lambda x: x.replace("1:", ""))
+    cols = df.columns.tolist()
+    cols = cols[-1:] + cols[:-1]
+    df = df[cols]
     return df
 
 
@@ -1330,6 +807,8 @@ def tf_idf_examples():
             "owner_2": "Owner 2",
         }
     )
+    df["Owner 1"] = df["Owner 1"].apply(lambda x: x.replace("&", r"\&"))
+    df["Owner 2"] = df["Owner 2"].apply(lambda x: x.replace("&", r"\&"))
     return df
 
 
@@ -1372,6 +851,8 @@ def fuzzy_examples():
             "owner_2": "Owner 2",
         }
     )
+    df["Owner 1"] = df["Owner 1"].apply(lambda x: x.replace("&", r"\&"))
+    df["Owner 2"] = df["Owner 2"].apply(lambda x: x.replace("&", r"\&"))
     return df
 
 
@@ -1403,6 +884,8 @@ def parcel_name_overrides():
             "owner_2": "Owner 2",
         }
     )
+    df["Owner 1"] = df["Owner 1"].apply(lambda x: x.replace("&", r"\&"))
+    df["Owner 2"] = df["Owner 2"].apply(lambda x: x.replace("&", r"\&"))
     return df
 
 
@@ -1445,6 +928,109 @@ def facility_tfidf_relationship():
     plt.title("Number of Facilities by TF-IDF Matching Parameter")
     plt.xlabel("TF-IDF Matching Parameter")
     plt.ylabel("Number of Facilities")
+
+
+@figure()
+def permit_sensitivity_analysis():
+    from cacafo.cluster.permits import (
+        _conjunction_dict_of_sets,
+        _disjunction_dict_of_sets,
+        _remove_duplicate_entries,
+        _remove_empty_entries,
+        facility_permit_distance_matches,
+        facility_permit_parcel_matches,
+    )
+
+    cow_permit_ids = {
+        p.id
+        for p in Permit.select(Permit.id).where(Permit.data["Program"] == "ANIWSTCOWS")
+    }
+    cow_permit_matches = lambda matches: _remove_empty_entries(
+        {
+            f: {p for p in permits if p in cow_permit_ids}
+            for f, permits in matches.items()
+        }
+    )
+
+    matching_distances = range(0, 1001, 50)
+
+    permit_data_filter = PermitPermittedLocation.source == "permit data"
+    geocoding_filter = PermitPermittedLocation.source == "address geocoding"
+    distance_filter = lambda d: FacilityPermittedLocation.distance < d
+
+    parcel_matches = facility_permit_parcel_matches()
+
+    data = []
+    for distance in matching_distances:
+        # permit data only
+        location_type = {
+            "permit data": facility_permit_distance_matches(
+                permit_data_filter & distance_filter(distance)
+            ),
+            "geocoding": facility_permit_distance_matches(
+                geocoding_filter & distance_filter(distance)
+            ),
+        }
+        location_type["both"] = _conjunction_dict_of_sets(
+            location_type["permit data"], location_type["geocoding"]
+        )
+        location_type["either"] = _disjunction_dict_of_sets(
+            location_type["permit data"], location_type["geocoding"]
+        )
+        for location_type_name, location_type_matches in location_type.items():
+            row = {
+                "distance": distance,
+                "location_type": location_type_name,
+            }
+
+            matches = location_type_matches
+
+            distance_only_matches = _remove_empty_entries(
+                _remove_duplicate_entries(matches)
+            )
+            distance_only_row = {
+                "matching_method": "distance only",
+                "n_clean_matches": len(distance_only_matches),
+            } | row
+            data.append(distance_only_row)
+
+            parcel_or_distance_matches = _remove_empty_entries(
+                _remove_duplicate_entries(
+                    _disjunction_dict_of_sets(matches, parcel_matches)
+                )
+            )
+            parcel_or_distance_row = {
+                "matching_method": "parcel + distance",
+                "n_clean_matches": len(parcel_or_distance_matches),
+            } | row
+            data.append(parcel_or_distance_row)
+
+            parcel_then_distance_matches = _disjunction_dict_of_sets(
+                parcel_matches,
+                _remove_empty_entries(_remove_duplicate_entries(matches)),
+            )
+            parcel_then_distance_row = {
+                "matching_method": "parcel then distance",
+                "n_clean_matches": len(parcel_then_distance_matches),
+            } | row
+            data.append(parcel_then_distance_row)
+
+    df = pd.DataFrame(data)
+    # only both and parcel then distance
+    df = df[df["matching_method"] == "parcel then distance"]
+    df = df[df["location_type"] == "both"]
+    # make lineplot
+    sns.lineplot(
+        data=df,
+        x="distance",
+        y="n_clean_matches",
+    )
+    plt.title("Number of Clean Matches by Matching Distance")
+    plt.xlabel("Matching Distance (m)")
+
+    plt.ylabel("Number of Clean Matches")
+    plt.tight_layout()
+    return df
 
 
 def generate(output_path, items=None):
