@@ -48,6 +48,7 @@ dependencies = [
 	"rl @ git+https://github.com/ProbablyFaiz/rl.git",
 	"rich",
 	"rich-click",
+	"matplotlib-scalebar",
 ]
 
 [project.optional-dependencies]
