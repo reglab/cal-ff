@@ -18,6 +18,10 @@ def propagate_not_afo_cafo():
     Propagate not afo and not cafo animal types to underlying
     Buildings. delete facilities marked with these types.
     """
+
+    fa = FacilityArchive.insert_from(
+                                    query=Facility.select())
+
     facility_ids = (
         m.Facility.select(m.Facility.id)
         .join(m.FacilityAnimalType)

@@ -143,6 +143,87 @@ class Facility(pw.Model):
         geom["bbox"] = feature["bbox"]
         return feature
 
+class FacilityArchive(pw.Model):
+    latitude = pw.DoubleField()
+    longitude = pw.DoubleField()
+    geometry = WktField()
+    uuid = pw.UUIDField(unique=True)
+
+    class Meta:
+        database = db
+
+    def to_gdf(self):
+        gdf = gpd.GeoDataFrame.from_records(
+            list(
+                Building.select(
+                    Building.id,
+                    Building.geometry,
+                    Building.latitude,
+                    Building.longitude,
+                )
+                .where(Building.facility == self)
+                .dicts()
+            ),
+        )
+        gdf = gdf.set_geometry("geometry")
+        gdf.crs = "EPSG:4326"
+        return gdf
+
+    @property
+    def all_permits(self):
+        return sum(
+            [
+                [
+                    ppl.permit
+                    for ppl in fpl.permitted_location.permit_permitted_locations
+                ]
+                for fpl in self.facility_permitted_locations
+            ],
+            [],
+        )
+
+    @property
+    def animal_types(self):
+        return [fat.animal_type for fat in self.facility_animal_types]
+
+    def to_geojson_feature(self):
+        geom = json.loads(shp.to_geojson(self.geometry))
+        feature = {
+            "type": "Feature",
+            "geometry": geom,
+            "id": str(self.uuid),
+        }
+
+        feature["properties"] = {
+            "id": self.id,
+            "uuid": str(self.uuid),
+            "latitude": self.latitude,
+            "longitude": self.longitude,
+            "lat_min": self.geometry.bounds[1],
+            "lon_min": self.geometry.bounds[0],
+            "lat_max": self.geometry.bounds[3],
+            "lon_max": self.geometry.bounds[2],
+            "parcels": [
+                model_to_dict(p, exclude=[Parcel.data, Parcel.county])
+                | {"county": p.county.name}
+                for p in set([b.parcel for b in self.buildings])
+                if p is not None
+            ],
+            "best_permits": [permit.data for permit in self.permits],
+            "all_permits": [permit.data for permit in self.all_permits],
+            "construction_annotation": model_to_dict(
+                self.construction_annotations[0],
+                exclude=[ConstructionAnnotation.facility],
+            ),
+        }
+        feature["bbox"] = [
+            self.geometry.bounds[0],
+            self.geometry.bounds[1],
+            self.geometry.bounds[2],
+            self.geometry.bounds[3],
+        ]
+        geom["bbox"] = feature["bbox"]
+        return feature
 
 class RegulatoryProgram(pw.Model):
     name = pw.TextField(unique=True)
@@ -339,6 +420,7 @@ class Building(pw.Model):
     facility = pw.ForeignKeyField(Facility, backref="buildings", null=True)
     image = pw.ForeignKeyField(Image, backref="buildings", null=True)
     cafo = pw.BooleanField(null=True)
+    building_cluster = pw.ForeignKeyField(BuildingCluster, backref='buildings', null=True)
 
     class Meta:
         database = db
@@ -367,6 +449,65 @@ class BuildingRelationship(pw.Model):
         constraints = [
             pw.Check("building_id != other_building_id"),
         ]
+
+class BuildingCluster(pw.Model):
+    latitude = pw.DoubleField()
+    longitude = pw.DoubleField()
+    geometry = WktField()
+    uuid = pw.UUIDField(unique=True)
+
+    class Meta:
+        database = db
+
+    def to_gdf(self):
+        gdf = gpd.GeoDataFrame.from_records(
+            list(
+                Building.select(
+                    Building.id,
+                    Building.geometry,
+                    Building.latitude,
+                    Building.longitude,
+                )
+                .where(Building.facility == self)
+                .dicts()
+            ),
+        )
+        gdf = gdf.set_geometry("geometry")
+        gdf.crs = "EPSG:4326"
+        return gdf
+
+    def to_geojson_feature(self):
+        geom = json.loads(shp.to_geojson(self.geometry))
+        feature = {
+            "type": "Feature",
+            "geometry": geom,
+            "id": str(self.uuid),
+        }
+
+        feature["properties"] = {
+            "id": self.id,
+            "uuid": str(self.uuid),
+            "latitude": self.latitude,
+            "longitude": self.longitude,
+            "lat_min": self.geometry.bounds[1],
+            "lon_min": self.geometry.bounds[0],
+            "lat_max": self.geometry.bounds[3],
+            "lon_max": self.geometry.bounds[2],
+            "parcels": [
+                model_to_dict(p, exclude=[Parcel.data, Parcel.county])
+                | {"county": p.county.name}
+                for p in set([b.parcel for b in self.buildings])
+                if p is not None
+            ],
+        }
+        feature["bbox"] = [
+            self.geometry.bounds[0],
+            self.geometry.bounds[1],
+            self.geometry.bounds[2],
+            self.geometry.bounds[3],
+        ]
+        geom["bbox"] = feature["bbox"]
+        return feature
 
 
 class AnimalType(pw.Model):
