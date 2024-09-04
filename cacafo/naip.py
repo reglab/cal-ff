@@ -9,6 +9,7 @@ import mercantile
 import numpy as np
 import rasterio
 import rasterio.merge
+import rich_click as click
 from google.auth.exceptions import DefaultCredentialsError
 from google.cloud import storage
 from PIL import Image
@@ -142,7 +143,7 @@ def get_tile(z, x, y):
 
 
 def list_available_images():
-    from models import County
+    from cacafo.db.models import County
 
     counties = sum(County.select(County.name).tuples(), ())
     client = _storage_client()
@@ -153,11 +154,10 @@ def list_available_images():
             subdir="images",
         )
         names = dc_cache.get(f"available_images_{county}")
-        if not blobs:
-            names = (
-                blob.name.split("/")[-1].split(".")[0]
-                for blob in client.list_blobs(BUCKET_NAME, prefix=f"{prefix}")
-            )
+        names = (
+            blob.name.split("/")[-1].split(".")[0]
+            for blob in client.list_blobs(BUCKET_NAME, prefix=f"{prefix}")
+        )
         images = []
         for name in names:
             images.append(name)
@@ -166,7 +166,7 @@ def list_available_images():
 
 
 def list_removed_images():
-    from models import County
+    from cacafo.db.models import County
 
     counties = sum(County.select(County.name).tuples(), ())
     client = _storage_client()
@@ -218,3 +218,36 @@ def create_subset(prefix, image_names, format_: Format = Format.JPEG):
         copy_blob(
             BUCKET_NAME, image_path, BUCKET_NAME, f"{prefix}/{image}.{format_.value}"
         )
+
+
+@click.group("naip", help="Commands for working with NAIP images on GCP")
+def _cli():
+    pass
+
+
+@_cli.group("ls", help="List available or removed images.")
+def _ls():
+    pass
+
+
+@_ls.command("available")
+def _ls_available():
+    for image in list_available_images():
+        print(image)
+
+
+@_ls.command("removed")
+def _ls_removed():
+    for image in list_removed_images():
+        print(image)
+
+
+@_cli.command("dl", help="Download an image from GCP.")
+@click.option("--image-name", required=True)
+@click.option("--output-path", required=True, type=click.Path())
+@click.option("--format", type=click.Choice(["jpeg", "tif"]), default="jpeg")
+def _download(image_name, output_path, format):
+    format_ = Format.JPEG if format == "jpeg" else Format.TIF
+    image = download_ca_cafo_naip_image(image_name, format_)
+    with open(output_path, "wb") as f:
+        f.write(image.read())
