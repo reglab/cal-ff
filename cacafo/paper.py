@@ -634,7 +634,7 @@ def map_example_permitted_facilities(plot_permits=False):
         )
         .distinct()
     )
-    random.seed(5)
+    random.seed(6)
     permitted_facilities = random.sample(permitted_facilities, 4)
     permit_locations = []
     if plot_permits:
@@ -668,9 +668,10 @@ def map_example_unpermitted_facilities():
         .where(
             FacilityPermittedLocation.id.is_null(True),
         )
+        .order_by(Facility.id)
         .distinct()
     )
-    random.seed(5)
+    random.seed(6)
     unpermitted_facilities = random.sample(unpermitted_facilities, 4)
     map_facilities(unpermitted_facilities)
 
@@ -686,7 +687,7 @@ def map_facilities(facilities, permit_locations=[]):
         gdf.plot(
             facecolor="none",
             edgecolor="black",
-            linewidth=4,
+            linewidth=0,
             ax=ax,
         )
         gdf.plot(
@@ -695,7 +696,6 @@ def map_facilities(facilities, permit_locations=[]):
             linewidth=2,
             ax=ax,
         )
-        ax.add_artist(ScaleBar(1))
         # add permit detected locations
         if permits:
             permit_gdf = gpd.GeoDataFrame(
@@ -741,8 +741,18 @@ def map_facilities(facilities, permit_locations=[]):
             ax.get_ylim()[1]
             + (longest_axis - (ax.get_ylim()[1] - ax.get_ylim()[0])) / 2,
         )
-        cacafo.naip.add_basemap(ax)
         ax.axis("off")
+    # maxis = max([ax.get_xlim()[1] - ax.get_xlim()[0] for ax in axes.flatten()])
+    maxis = 500
+    for ax in axes.flatten():
+        midpoint = (ax.get_xlim()[1] + ax.get_xlim()[0]) / 2, (
+            ax.get_ylim()[1] + ax.get_ylim()[0]
+        ) / 2
+        ax.set_xlim(midpoint[0] - maxis / 2, midpoint[0] + maxis / 2)
+        ax.set_ylim(midpoint[1] - maxis / 2, midpoint[1] + maxis / 2)
+        ax.add_artist(ScaleBar(1))
+        cacafo.naip.add_basemap(ax)
+    plt.tight_layout()
 
 
 @table()
@@ -762,6 +772,7 @@ def labeling():
     )
     df["name"] = df["name"].apply(lambda x: x.replace("0:", ""))
     df["name"] = df["name"].apply(lambda x: x.replace("1:", ""))
+    df = df[~df["name"].str.contains("post hoc")]
     cols = df.columns.tolist()
     cols = cols[-1:] + cols[:-1]
     df = df[cols]
@@ -895,39 +906,42 @@ def facility_set(**kwargs):
 
 
 @figure()
-def facility_eps_relationship():
+def facility_matching_parameters():
+    plt.figure(figsize=(7, 2.5))
+    ax = plt.subplot(1, 3, 1)
     num_facilities = []
     for eps in range(0, 1000, 50):
         facilities = facility_set(distance=eps)
         num_facilities.append(len(facilities))
-    sns.lineplot(x=range(0, 1000, 50), y=num_facilities)
-    plt.title("Number of Facilities by Maximum Distance Parameter")
-    plt.xlabel("Distance Parameter (m)")
-    plt.ylabel("Number of Facilities")
+    sns.lineplot(x=range(0, 1000, 50), y=num_facilities, ax=ax)
+    ax.axvline(400, color="lightgray", linestyle="--")
+    ax.set_title("Distance")
+    ax.set_xlabel("Distance Parameter (m)")
+    ax.set_ylabel("Number of Facilities")
 
-
-@figure()
-def facility_fuzzy_relationship():
+    ax = plt.subplot(1, 3, 2)
     num_facilities = []
     for fuzzy in range(0, 1000, 50):
         facilities = facility_set(fuzzy=fuzzy)
         num_facilities.append(len(facilities))
-    sns.lineplot(x=[n / 1000 for n in range(0, 1000, 50)], y=num_facilities)
-    plt.title("Number of Facilities by Fuzzy Matching Parameter")
-    plt.xlabel("Fuzzy Matching Parameter")
-    plt.ylabel("Number of Facilities")
+    sns.lineplot(x=[n / 1000 for n in range(0, 1000, 50)], y=num_facilities, ax=ax)
+    ax.axvline(0.6, color="lightgray", linestyle="--")
+    ax.set_title("Fuzzy")
+    ax.set_xlabel("Fuzzy Matching Parameter")
+    ax.set_ylabel("Number of Facilities")
 
-
-@figure()
-def facility_tfidf_relationship():
+    ax = plt.subplot(1, 3, 3)
     num_facilities = []
     for tfidf in range(0, 1000, 50):
         facilities = facility_set(tfidf=tfidf)
         num_facilities.append(len(facilities))
-    sns.lineplot(x=[n / 1000 for n in range(0, 1000, 50)], y=num_facilities)
-    plt.title("Number of Facilities by TF-IDF Matching Parameter")
-    plt.xlabel("TF-IDF Matching Parameter")
-    plt.ylabel("Number of Facilities")
+    sns.lineplot(x=[n / 1000 for n in range(0, 1000, 50)], y=num_facilities, ax=ax)
+    ax.axvline(0.7, color="lightgray", linestyle="--")
+    ax.set_title("TF-IDF")
+    ax.set_xlabel("TF-IDF Matching Parameter")
+    ax.set_ylabel("Number of Facilities")
+
+    plt.tight_layout()
 
 
 @figure()

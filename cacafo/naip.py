@@ -95,7 +95,7 @@ def add_basemap(ax):
         print(f"No images found for area {xmin, ymin, xmax, ymax}")
         return ax
     datasets = []
-    for name in names:
+    for name in tqdm(names, desc="Downloading images"):
         try:
             datasets.append(download_ca_cafo_naip_image(name, format_=Format.TIF))
         except Exception as e:
