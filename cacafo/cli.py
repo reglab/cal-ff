@@ -108,15 +108,17 @@ def tunnel():
 
 from cacafo.check import check
 from cacafo.data.jobs import cmd_jobs
-from cacafo.export import export
+from cacafo.export import _cli as export_cli
 from cacafo.naip import _cli as naip_cli
 from cacafo.paper import cmd_generate
+from cacafo.reports import _cli as reports_cli
 
 cli.add_command(check)
-cli.add_command(export)
+cli.add_command(export_cli)
 cli.add_command(cmd_generate)
 cli.add_command(cmd_jobs)
 cli.add_command(naip_cli)
+cli.add_command(reports_cli)
 
 if __name__ == "__main__":
     cli()

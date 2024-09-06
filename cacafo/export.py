@@ -73,15 +73,19 @@ def export_geojson(output_path: str):
         ConstructionAnnotation.select(),
     )
     features = [facility.to_geojson_feature() for facility in tqdm(query)]
-    return {
+    geojson = {
         "type": "FeatureCollection",
         "features": features,
     }
     with open(output_path, "w") as f:
-        json.dump(geojson, f)
+        json.dump(
+            geojson,
+            f,
+        )
+    return geojson
 
 
-@click.command()
+@click.command("export")
 @click.option(
     "--output-path",
     "-o",
@@ -98,7 +102,7 @@ def export_geojson(output_path: str):
     default=None,
     help="Output format; inferred from output path if not provided",
 )
-def export(output_path: str, format_: str):
+def _cli(output_path: str, format_: str):
     if format_ is None:
         format_ = output_path.split(".")[-1]
     match format_:
