@@ -45,9 +45,7 @@ def get_building_relationships(
 
 def dict_of_lists(**kwargs):
     dol = {
-        # b[0]: set() for b in Building.select(Building.id).where(Building.cafo).tuples()
-        b[0]: set()
-        for b in Building.select(Building.id).tuples()
+        b[0]: set() for b in Building.select(Building.id).where(Building.cafo).tuples()
     }
     query = get_building_relationships(**kwargs)
     for br in query:
