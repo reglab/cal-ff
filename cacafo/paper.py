@@ -35,7 +35,9 @@ plt.rcParams["text.latex.preamble"] = r"\usepackage{mathptmx}\usepackage{amsmath
 
 BOOTSTRAP_ITERS = 5000
 
-facility_cluster_cache = dc.Cache("facility_cluster_cache")
+facility_cluster_cache = dc.Cache(
+    str(rl.utils.io.get_data_path("facility_cluster_cache"))
+)
 
 
 class PaperMethod(abc.ABC):
@@ -634,7 +636,7 @@ def map_example_permitted_facilities(plot_permits=False):
         )
         .distinct()
     )
-    random.seed(6)
+    random.seed(7)
     permitted_facilities = random.sample(permitted_facilities, 4)
     permit_locations = []
     if plot_permits:
@@ -671,7 +673,7 @@ def map_example_unpermitted_facilities():
         .order_by(Facility.id)
         .distinct()
     )
-    random.seed(6)
+    random.seed(7)
     unpermitted_facilities = random.sample(unpermitted_facilities, 4)
     map_facilities(unpermitted_facilities)
 
@@ -915,9 +917,12 @@ def facility_matching_parameters():
         num_facilities.append(len(facilities))
     sns.lineplot(x=range(0, 1000, 50), y=num_facilities, ax=ax)
     ax.axvline(400, color="lightgray", linestyle="--")
-    ax.set_title("Distance")
+    ax.axvline(200, color="lightgray", linestyle="--")
     ax.set_xlabel("Distance Parameter (m)")
     ax.set_ylabel("Number of Facilities")
+    ax.yaxis.set_major_locator(plt.MultipleLocator(200))
+
+    ylim = ax.get_ylim()
 
     ax = plt.subplot(1, 3, 2)
     num_facilities = []
@@ -926,9 +931,10 @@ def facility_matching_parameters():
         num_facilities.append(len(facilities))
     sns.lineplot(x=[n / 1000 for n in range(0, 1000, 50)], y=num_facilities, ax=ax)
     ax.axvline(0.6, color="lightgray", linestyle="--")
-    ax.set_title("Fuzzy")
     ax.set_xlabel("Fuzzy Matching Parameter")
     ax.set_ylabel("Number of Facilities")
+    ax.set_ylim(ylim)
+    ax.yaxis.set_major_locator(plt.MultipleLocator(200))
 
     ax = plt.subplot(1, 3, 3)
     num_facilities = []
@@ -937,9 +943,10 @@ def facility_matching_parameters():
         num_facilities.append(len(facilities))
     sns.lineplot(x=[n / 1000 for n in range(0, 1000, 50)], y=num_facilities, ax=ax)
     ax.axvline(0.7, color="lightgray", linestyle="--")
-    ax.set_title("TF-IDF")
     ax.set_xlabel("TF-IDF Matching Parameter")
     ax.set_ylabel("Number of Facilities")
+    ax.set_ylim(ylim)
+    ax.yaxis.set_major_locator(plt.MultipleLocator(200))
 
     plt.tight_layout()
 
@@ -1039,10 +1046,10 @@ def permit_sensitivity_analysis():
         x="distance",
         y="n_clean_matches",
     )
-    plt.title("Number of Clean Matches by Matching Distance")
+    plt.axvline(200, color="lightgray", linestyle="--")
+    plt.title("Number of Best Permit Matches by Matching Distance")
     plt.xlabel("Matching Distance (m)")
-
-    plt.ylabel("Number of Clean Matches")
+    plt.ylabel("Number of Best Permit Matches")
     plt.tight_layout()
     return df
 
