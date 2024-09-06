@@ -344,6 +344,26 @@ class Building(pw.Model):
         database = db
         indexes = ((("latitude", "longitude"), True),)
 
+    def to_geojson_feature(self):
+        geom = json.loads(shp.to_geojson(self.geometry))
+        feature = {
+            "type": "Feature",
+            "geometry": geom,
+            "id": self.id,
+        }
+        feature["properties"] = {
+            "id": self.id,
+            "latitude": self.latitude,
+            "longitude": self.longitude,
+            "area_sqm": self.area_sqm,
+            "legacy_index": self.legacy_index,
+            "cafo": self.cafo,
+            "facility": str(self.facility.uuid) if self.facility else None,
+            "parcel": self.parcel.numb if self.parcel else None,
+            "image": self.image.name if self.image else None,
+        }
+        return feature
+
 
 class BuildingRelationship(pw.Model):
     building = pw.ForeignKeyField(Building, backref="building_relationships")
