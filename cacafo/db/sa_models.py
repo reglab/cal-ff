@@ -5,8 +5,7 @@ import shapely as shp
 import shapely.wkt as wkt
 import sqlalchemy as sa
 from geoalchemy2 import Geometry
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, declarative_base, mapped_column, relationship
 
 Base = declarative_base()
 
@@ -27,7 +26,7 @@ class County(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str]
-    geometry: Mapped[Geometry] = mapped_column(Geometry("POLYGON"))
+    geometry: Mapped[Geometry] = mapped_column(Geometry("MULTIPOLYGON"))
 
     county_group_id: Mapped[int] = mapped_column(sa.ForeignKey("county_group.id"))
     county_group: Mapped[CountyGroup] = relationship(
@@ -35,6 +34,10 @@ class County(Base):
     )
 
     parcels: Mapped[list["Parcel"]] = relationship("Parcel", back_populates="county")
+    images: Mapped[list["Image"]] = relationship("Image", back_populates="county")
+    facilities: Mapped[list["Facility"]] = relationship(
+        "Facility", back_populates="county"
+    )
 
     @classmethod
     def geocode(cls, session, lon=None, lat=None):
@@ -58,6 +61,11 @@ class Parcel(Base):
 
     county_id: Mapped[int] = mapped_column(sa.ForeignKey("county.id"))
     county = relationship("County", back_populates="parcels")
+
+    permits: Mapped[list["Permit"]] = relationship("Permit", back_populates="parcel")
+    buildings: Mapped[list["Building"]] = relationship(
+        "Building", back_populates="parcel"
+    )
 
 
 class Permit(Base):
@@ -89,6 +97,13 @@ class Image(Base):
     county_id: Mapped[int] = mapped_column(sa.ForeignKey("county.id"))
     county = relationship("County", back_populates="images")
 
+    annotations: Mapped[list["ImageAnnotation"]] = relationship(
+        "ImageAnnotation", back_populates="image"
+    )
+    buildings: Mapped[list["Building"]] = relationship(
+        "Building", back_populates="image"
+    )
+
     @classmethod
     def get_images_for_area(cls, geometry: shp.geometry.base.BaseGeometry, session):
         query = sa.select(cls).where(cls.geometry.intersects(geometry))
@@ -101,6 +116,13 @@ class AnimalTypeAnnotation(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     animal_type: Mapped[str]
     location: Mapped[Geometry] = mapped_column(Geometry("POINT"))
+    facility_id: Mapped[int] = mapped_column(sa.ForeignKey("facility.id"))
+    annotated_on: Mapped[datetime] = mapped_column(sa.DateTime)
+
+    facility_id: Mapped[int] = mapped_column(
+        sa.ForeignKey("facility.id"), nullable=True
+    )
+    facility = relationship("Facility", back_populates="all_animal_type_annotations")
 
 
 class CafoAnnotation(Base):
@@ -110,6 +132,12 @@ class CafoAnnotation(Base):
     is_cafo: Mapped[bool]
     is_afo: Mapped[bool]
     location: Mapped[Geometry] = mapped_column(Geometry("POINT"))
+    annotated_on: Mapped[datetime] = mapped_column(sa.DateTime)
+
+    facility_id: Mapped[int] = mapped_column(
+        sa.ForeignKey("facility.id"), nullable=True
+    )
+    facility = relationship("Facility", back_populates="all_cafo_annotations")
 
 
 class ConstructionAnnotation(Base):
@@ -124,6 +152,12 @@ class ConstructionAnnotation(Base):
     significant_population_change: Mapped[bool] = mapped_column(sa.Boolean)
     is_primarily_indoors: Mapped[bool] = mapped_column(sa.Boolean)
     has_lagoon: Mapped[bool] = mapped_column(sa.Boolean)
+    annotated_on: Mapped[datetime] = mapped_column(sa.DateTime)
+
+    facility_id: Mapped[int] = mapped_column(
+        sa.ForeignKey("facility.id"), nullable=True
+    )
+    facility = relationship("Facility", back_populates="all_construction_annotations")
 
 
 class ParcelOwnerRelationshipAnnotations(Base):
@@ -162,15 +196,14 @@ class Building(Base):
 
     building_relationships: Mapped[list["BuildingRelationship"]] = relationship(
         "BuildingRelationship",
-        primaryjoin="Building.id == BuildingRelationship.building_id",
-        backref="building",
+        foreign_keys="BuildingRelationship.building_id",
+        back_populates="building",
     )
-    related_buildings: Mapped[list["Building"]] = relationship(
-        "Building",
-        secondary=lambda: BuildingRelationship.__table__,
-        primaryjoin="Building.id == BuildingRelationship.building_id",
-        secondaryjoin="Building.id == BuildingRelationship.related_building_id",
+
+    facility_id: Mapped[int] = mapped_column(
+        sa.ForeignKey("facility.id"), nullable=True
     )
+    facility = relationship("Facility", back_populates="all_buildings")
 
 
 class BuildingRelationship(Base):
@@ -203,8 +236,61 @@ class Facility(Base):
     county_id: Mapped[int] = mapped_column(sa.ForeignKey("county.id"))
     county = relationship("County", back_populates="facilities")
 
+    all_animal_type_annotations: Mapped[list["AnimalTypeAnnotation"]] = relationship(
+        "AnimalTypeAnnotation", back_populates="facility"
+    )
+    all_cafo_annotations: Mapped[list["CafoAnnotation"]] = relationship(
+        "CafoAnnotation", back_populates="facility"
+    )
+    all_construction_annotations: Mapped[list["ConstructionAnnotation"]] = relationship(
+        "ConstructionAnnotation", back_populates="facility"
+    )
+    all_buildings: Mapped[list["Building"]] = relationship(
+        "Building", back_populates="facility"
+    )
+
     @staticmethod
     def _generate_hash_on_insert(context):
         params = context.get_current_parameters()
         if params["hash"] is None:
             params["hash"] = hashlib.md5(params["geometry"].wkt.encode()).hexdigest()
+
+    @property
+    def animal_types(self):
+        return set(
+            [
+                annotation.animal_type
+                for annotation in self.all_animal_type_annotations
+                if annotation.annotated_on
+                == max(
+                    [
+                        annotation.annotated_on
+                        for annotation in self.all_animal_type_annotations
+                    ]
+                )
+            ]
+        )
+
+    @property
+    def is_cafo(self):
+        return not any(
+            [not annotation.is_cafo for annotation in self.all_cafo_annotations]
+        )
+
+    @property
+    def is_afo(self):
+        return not any(
+            [not annotation.is_afo for annotation in self.all_cafo_annotations]
+        )
+
+    @property
+    def construction_annotation(self):
+        return max(self.all_construction_annotations, key=lambda x: x.annotated_on)
+
+    @property
+    def buildings(self):
+        return [building for building in self.all_buildings if not building.excluded_at]
+
+    @property
+    def images(self):
+        return [building.image for building in self.buildings if building.image]

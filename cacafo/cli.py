@@ -57,7 +57,6 @@ def cli(log_level, debug, rich_traceback, echo_queries):
 
 @cli.command()
 def sql():
-    import os
     import subprocess
 
     from cacafo.db.session import get_postgres_uri
@@ -67,14 +66,12 @@ def sql():
 
 @cli.command()
 def tunnel():
-    import os
     import subprocess
 
-    import requests
     from rl.utils.io import getenv
 
     try:
-        proc = subprocess.run(
+        subprocess.run(
             f"curl localhost:{getenv('SSH_LOCAL_PORT')}".split(),
             check=True,
             timeout=1,
@@ -106,7 +103,9 @@ def tunnel():
     )
 
 
+# ruff: noqa: E402
 from cacafo.check import check
+from cacafo.data.ingest import _cli as ingest_cli
 from cacafo.data.jobs import cmd_jobs
 from cacafo.export import _cli as export_cli
 from cacafo.naip import _cli as naip_cli
@@ -119,6 +118,7 @@ cli.add_command(cmd_generate)
 cli.add_command(cmd_jobs)
 cli.add_command(naip_cli)
 cli.add_command(reports_cli)
+cli.add_command(ingest_cli)
 
 if __name__ == "__main__":
     cli()

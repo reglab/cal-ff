@@ -9,13 +9,10 @@ from time import sleep
 
 import diskcache as dc
 import gsheets
-import requests
 import rl.utils.io
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
 from tqdm import tqdm
-
-import cacafo.dataloop
 
 SOURCE_DATA_ROOT = str(rl.utils.io.get_data_path() / "source")
 os.makedirs(os.path.dirname(SOURCE_DATA_ROOT), exist_ok=True)
@@ -138,7 +135,7 @@ class GoogleDriveFolderDataSource(DataSource):
             for file in files:
                 try:
                     file.FetchContent()
-                except Exception as e:
+                except Exception:
                     sleep(1)
                     file.FetchContent()
                 with open(f"{self.path()}/{file['title']}", "wb") as f:
@@ -198,6 +195,8 @@ class DataLoopDataSource(DataSource):
         self.dataset_name = dataset_name
 
     def download(self):
+        import cacafo.dataloop
+
         os.makedirs(os.path.dirname(self.path()), exist_ok=True)
         data = cacafo.dataloop.get_dataset(self.dataset_name)
         with open(self.path(), "w") as f:
@@ -317,6 +316,13 @@ GoogleSheetsDataSource(
     "Construction dating annotations for ex ante permit adjacents.",
     "CSV with columns: processing date, annotator, cafo id, cafo uuid, latitude, longitude, lat/lon,...",
     "https://docs.google.com/spreadsheets/d/1P40ImWtcb_EyRdXUILrE1iAzXnjwnNsZ5lQT-A2puJ0/edit?usp=sharing",
+)
+
+GoogleDriveDataSource(
+    "counties.csv",
+    "List of counties in California",
+    "CSV with columns: county, the_geom, lat, lon",
+    "https://drive.google.com/file/d/1eF8OuHcobFcxeULsqYdNeuqnP2U7TnZu/view?usp=sharing",
 )
 
 GoogleSheetsDataSource(
