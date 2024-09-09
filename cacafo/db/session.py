@@ -1,7 +1,7 @@
 from urllib.parse import quote_plus
 
 import rl.utils.io
-import sshtunnel
+import sqlalchemy as sa
 from playhouse.postgres_ext import PostgresqlExtDatabase
 
 
@@ -40,3 +40,23 @@ def get_peewee_connection(
     kwargs are passed to get_postgres_uri.
     """
     return PostgresqlExtDatabase(get_postgres_uri(**kwargs))
+
+
+def get_sqlalchemy_engine(
+    **kwargs,
+):
+    """
+    Get a SQLAlchemy engine object for the Postgres database.
+    kwargs are passed to get_postgres_uri.
+    """
+    return sa.create_engine(get_postgres_uri(**kwargs))
+
+
+def get_sqlalchemy_session(
+    **kwargs,
+):
+    """
+    Get a SQLAlchemy session object for the Postgres database.
+    kwargs are passed to get_sqlalchemy_engine.
+    """
+    return sa.orm.sessionmaker(bind=get_sqlalchemy_engine(**kwargs))()

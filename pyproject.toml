@@ -49,6 +49,9 @@ dependencies = [
 	"rich",
 	"rich-click",
 	"matplotlib-scalebar",
+	"alembic>=1.13.2",
+	"geoalchemy2>=0.15.2",
+	"ruff>=0.6.4",
 ]
 
 [project.optional-dependencies]
