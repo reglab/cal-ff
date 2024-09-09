@@ -23,3 +23,8 @@ Host lcr
 	User {fill in user}
 	Port 5988
 ```
+
+## Database
+
+Before running migrations/creating the db, you will have to manually
+run `CREATE EXTENSION postgis;` as a superuser on the db.
