@@ -1,10 +1,11 @@
 from functools import lru_cache
 
+import geopandas as gpd
 import networkx as nx
 import numpy as np
 import shapely as shp
 
-from cacafo.db.models import Building
+from cacafo.db.models import Building, County, Image
 
 
 @lru_cache
@@ -82,3 +83,17 @@ def clean_facility_geometry(facility):
 
     multipolygon = shp.MultiPolygon(list(final_polygons))
     return shp.ops.orient(multipolygon)
+
+
+def get_image_geojson():
+    images = Image.select().join(County).where(County.name == "Madera")
+    gdf = gpd.GeoDataFrame(
+        {
+            "geometry": [i.geometry for i in images],
+            "id": [i.id for i in images],
+            "label_status": [i.label_status for i in images],
+            "bucket": [i.bucket for i in images],
+        }
+    )
+    gdf.crs = "EPSG:4326"
+    return gdf.to_json()
