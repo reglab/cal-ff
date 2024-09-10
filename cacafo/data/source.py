@@ -318,20 +318,6 @@ GoogleSheetsDataSource(
     "https://docs.google.com/spreadsheets/d/1P40ImWtcb_EyRdXUILrE1iAzXnjwnNsZ5lQT-A2puJ0/edit?usp=sharing",
 )
 
-GoogleDriveDataSource(
-    "counties.csv",
-    "List of counties in California",
-    "CSV with columns: county, the_geom, lat, lon",
-    "https://drive.google.com/file/d/1eF8OuHcobFcxeULsqYdNeuqnP2U7TnZu/view?usp=sharing",
-)
-
-GoogleSheetsDataSource(
-    "county_groups.csv",
-    "County super groups",
-    "CSV with columns: County, Group Name",
-    "https://docs.google.com/spreadsheets/d/1TKMLlPGi7Dh5KYr5ISfF5o10pP5UHeVp_or5rEn7KsI/edit?usp=sharing",
-)
-
 GoogleSheetsDataSource(
     "construction_dating_missed_adjacents.csv",
     "Missed adjacent construction dating annotations",
@@ -384,13 +370,6 @@ for worksheet in (
     )
 
 
-GoogleDriveDataSource(
-    "AFO_permits_all.csv",
-    "All permit locations from CWIQS",
-    "CSV with columns including Latitude, Longitude, Facility Address, etc.",
-    "https://drive.google.com/file/d/10-q-bNvPvDZjuIh8He9S7cQHRVKqbz2-/view?usp=sharing",
-)
-
 GoogleDriveFolderDataSource(
     "parcels/polygon-centroids-merge-v2",
     "Polygon centroids matched to parcels",
@@ -405,6 +384,8 @@ GoogleDriveFolderDataSource(
     "https://drive.google.com/drive/folders/1LAirMDQEmFgRcznrZTTtyTJ5-D1ifBa5?usp=drive_link",
 )
 
+################
+
 GoogleDriveDataSource(
     "parcels.csv",
     "Parcels",
@@ -417,4 +398,33 @@ GoogleDriveDataSource(
     "Parcel locations",
     "csv with county_name, number, lat, lon",
     "https://drive.google.com/file/d/1ott9PR6B17jakxZLiu44ygl7yXLVb3ji/view?usp=drive_link",
+)
+
+GoogleDriveDataSource(
+    "geocoded_addresses.csv",
+    "Geocoded addresses",
+    "csv with Latitude, Longitude, Address, City, State, Zip",
+    "https://drive.google.com/file/d/1YiNvq94ctJ6WE8a_uwn6dU__Gy7nm2gp/view?usp=drive_link",
+)
+
+GoogleDriveDataSource(
+    "permits.csv",
+    "All permit locations from CWIQS",
+    "CSV with columns including Latitude, Longitude, Facility Address, etc.",
+    "https://drive.google.com/file/d/1ut68DkRFRMhs14-RNgHya6Yo1ZZok8-r/view?usp=drive_link",
+)
+
+
+GoogleSheetsDataSource(
+    "county_groups.csv",
+    "County super groups",
+    "CSV with columns: County, Group Name",
+    "https://docs.google.com/spreadsheets/d/1TKMLlPGi7Dh5KYr5ISfF5o10pP5UHeVp_or5rEn7KsI/edit?usp=sharing",
+)
+
+GoogleDriveDataSource(
+    "counties.csv",
+    "List of counties in California",
+    "CSV with columns: county, the_geom, lat, lon",
+    "https://drive.google.com/file/d/1eF8OuHcobFcxeULsqYdNeuqnP2U7TnZu/view?usp=sharing",
 )

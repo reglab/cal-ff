@@ -213,6 +213,50 @@ def parcel(session):
     session.add_all(parcels.values())
 
 
+@ingestor(m.Permit)
+def permit(session):
+    with open(cacafo.data.source.get("geocoded_addresses.csv")) as f:
+        geocoded_addresses: dict[tuple[str, str], str] = {
+            (line["Address"], line["City"]): (
+                shp.geometry.Point(
+                    float(line["Longitude"]), float(line["Latitude"])
+                ).wkt,
+            )
+            for line in csv.DictReader(f)
+        }
+    with open(cacafo.data.source.get("permits.csv")) as f:
+        reader = csv.DictReader(f)
+        permits = []
+        for line in rich.progress.track(reader, description="Ingesting permits"):
+            full_address = line["Facility Address"]
+            try:
+                tokens = [s.strip() for s in full_address.split(",")]
+                address, city = tokens[:2]
+            except ValueError:
+                full_address = line["Agency Address"]
+                tokens = [s.strip() for s in full_address.split(",")]
+                address, city = tokens[:2]
+            geom = None
+            try:
+                geom = shp.geometry.Point(
+                    float(line["Longitude"]), float(line["Latitude"])
+                ).wkt
+            except ValueError:
+                geom = None
+                click.secho(
+                    f"Permit {line['WDID']} has invalid coordinates",
+                    fg="yellow",
+                )
+            permits.append(
+                m.Permit(
+                    data=line,
+                    registered_location=geom,
+                    geocoded_address_location=geocoded_addresses.get((address, city)),
+                )
+            )
+        session.add_all(permits)
+
+
 @click.command("ingest", help="Ingest data into the database")
 @click.option("--overwrite", is_flag=True)
 @click.option("--add", is_flag=True)
