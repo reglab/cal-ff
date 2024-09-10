@@ -404,3 +404,17 @@ GoogleDriveFolderDataSource(
     "folder of csvs with permit heading",
     "https://drive.google.com/drive/folders/1LAirMDQEmFgRcznrZTTtyTJ5-D1ifBa5?usp=drive_link",
 )
+
+GoogleDriveDataSource(
+    "parcels.csv",
+    "Parcels",
+    "csv with number, county, owner, address, data",
+    "https://drive.google.com/file/d/18SnzOmuQfCKg_Ze-SMaQXdH8y5Rs1ETd/view?usp=sharing",
+)
+
+GoogleDriveDataSource(
+    "parcel_locations.csv",
+    "Parcel locations",
+    "csv with county_name, number, lat, lon",
+    "https://drive.google.com/file/d/1WXSmy6girh9VvBqSFyKK3caukWLq2NEC/view?usp=drive_link",
+)

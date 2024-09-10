@@ -2,8 +2,10 @@ import csv
 import typing as t
 from dataclasses import dataclass
 
+import pyproj
 import rich.progress
 import rich_click as click
+import shapely as shp
 import sqlalchemy as sa
 from rich.traceback import install
 
@@ -12,6 +14,10 @@ import cacafo.db.sa_models as m
 from cacafo.db.session import get_sqlalchemy_session
 
 install(show_locals=True)
+
+
+DEFAULT_EPSG = 4326
+CA_EPSG = 3311
 
 
 def _is_populated(session, model):
@@ -118,6 +124,75 @@ def county(session):
                 )
             )
         session.add_all(counties)
+
+
+@ingestor(m.Parcel, depends_on=[m.County])
+def parcel(session):
+    county_name_to_id = {
+        name: id
+        for name, id in session.execute(sa.select(m.County.name, m.County.id)).all()
+    }
+
+    parcels: dict[tuple[str, str], m.Parcel] = {}
+
+    with open(cacafo.data.source.get("parcels.csv")) as f:
+        reader = csv.DictReader(f)
+        for line in rich.progress.track(reader, description="Ingesting parcels"):
+            parcel = m.Parcel(
+                owner=line["owner"],
+                address=line["address"],
+                number=line["numb"],
+                data=line,
+                inferred_geometry=None,
+                county_id=county_name_to_id[line["county_name"]],
+            )
+            parcels[(line["county_name"], line["numb"])] = parcel
+
+    with open(cacafo.data.source.get("parcel_locations.csv")) as f:
+        reader = csv.DictReader(f)
+        # each line lists a county,number,lat,lon
+        for line in rich.progress.track(
+            reader, description="Ingesting parcel locations"
+        ):
+            county, number, lat, lon = (
+                line["county_name"],
+                line["numb"],
+                line["latitude"],
+                line["longitude"],
+            )
+            if (county, number) not in parcels:
+                continue
+            if parcels[(county, number)].inferred_geometry is not None:
+                # merge the two geometries
+                parcels[(county, number)].inferred_geometry = parcels[
+                    (county, number)
+                ].inferred_geometry.union(shp.geometry.Point(float(lon), float(lat)))
+            else:
+                parcels[(county, number)].inferred_geometry = shp.geometry.Point(
+                    float(lon), float(lat)
+                )
+    to_meters = pyproj.Transformer.from_crs(DEFAULT_EPSG, CA_EPSG, always_xy=True)
+    to_latlon = pyproj.Transformer.from_crs(CA_EPSG, DEFAULT_EPSG, always_xy=True)
+    for parcel in rich.progress.track(
+        parcels.values(), description="Processing geometries"
+    ):
+        if not parcel.inferred_geometry:
+            continue
+        # transform to meters, buffer, hull, transform back to latlon
+        original_geometry = parcel.inferred_geometry
+        points_in_meters = shp.ops.transform(
+            to_meters.transform, parcel.inferred_geometry
+        )
+        buffer = points_in_meters.buffer(5)
+        convex_hull = buffer.convex_hull
+        parcel.inferred_geometry = shp.ops.transform(to_latlon.transform, convex_hull)
+
+        assert shp.geometry.shape(parcel.inferred_geometry).is_valid
+        assert shp.geometry.shape(parcel.inferred_geometry).contains(original_geometry)
+
+        parcel.inferred_geometry = parcel.inferred_geometry.wkt
+
+    session.add_all(parcels.values())
 
 
 @click.command("ingest", help="Ingest data into the database")

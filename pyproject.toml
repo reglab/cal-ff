@@ -53,6 +53,7 @@ dependencies = [
 	"geoalchemy2>=0.15.2",
 	"ruff>=0.6.4",
 	"pgcli>=4.1.0",
+	"pyproj>=3.6.1",
 ]
 
 [project.optional-dependencies]

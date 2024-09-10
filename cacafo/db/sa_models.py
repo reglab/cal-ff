@@ -57,15 +57,34 @@ class Parcel(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     owner: Mapped[str]
     address: Mapped[str]
+    number: Mapped[str]
     data: Mapped[dict] = mapped_column(sa.JSON)
+    inferred_geometry: Mapped[Geometry] = mapped_column(
+        Geometry("POLYGON"), nullable=True
+    )
 
     county_id: Mapped[int] = mapped_column(sa.ForeignKey("county.id"))
     county = relationship("County", back_populates="parcels")
 
-    permits: Mapped[list["Permit"]] = relationship("Permit", back_populates="parcel")
+    registered_location_permits: Mapped[list["Permit"]] = relationship(
+        "Permit",
+        back_populates="registered_location_parcel",
+        foreign_keys="Permit.registered_location_parcel_id",
+    )
+    geocoded_address_location_permits: Mapped[list["Permit"]] = relationship(
+        "Permit",
+        back_populates="geocoded_address_location_parcel",
+        foreign_keys="Permit.geocoded_address_location_parcel_id",
+    )
     buildings: Mapped[list["Building"]] = relationship(
         "Building", back_populates="parcel"
     )
+
+    @property
+    def permits(self):
+        return self.registered_location_permits + self.geocoded_address_location_permits
+
+    __table_args__ = (sa.UniqueConstraint("number", "county_id"),)
 
 
 class Permit(Base):
@@ -80,8 +99,22 @@ class Permit(Base):
         Geometry("POINT"), nullable=True
     )
 
-    parcel_id: Mapped[int] = mapped_column(sa.ForeignKey("parcel.id"))
-    parcel = relationship("Parcel", back_populates="permits")
+    registered_location_parcel_id: Mapped[int] = mapped_column(
+        sa.ForeignKey("parcel.id"), nullable=True
+    )
+    registered_location_parcel = relationship(
+        "Parcel",
+        back_populates="registered_location_permits",
+        foreign_keys=[registered_location_parcel_id],
+    )
+    geocoded_address_location_parcel_id: Mapped[int] = mapped_column(
+        sa.ForeignKey("parcel.id"), nullable=True
+    )
+    geocoded_address_location_parcel = relationship(
+        "Parcel",
+        back_populates="geocoded_address_location_permits",
+        foreign_keys=[geocoded_address_location_parcel_id],
+    )
 
 
 class Image(Base):
