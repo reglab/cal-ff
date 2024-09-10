@@ -160,6 +160,24 @@ def parcel(session):
                 line["latitude"],
                 line["longitude"],
             )
+            if not county:
+                # check every county
+                possible_parcels = [
+                    (c, number)
+                    for c in county_name_to_id.keys()
+                    if (c, number) in parcels
+                ]
+                if len(possible_parcels) == 0:
+                    rich.print(
+                        f"Skipping parcel num. {number} because it is not in any county"
+                    )
+                    continue
+                if len(possible_parcels) != 1:
+                    rich.print(
+                        f"Skipping parcel {number} because it is in multiple counties: {possible_parcels}"
+                    )
+                    continue
+                county = possible_parcels[0][0]
             if (county, number) not in parcels:
                 continue
             if parcels[(county, number)].inferred_geometry is not None:

@@ -416,5 +416,5 @@ GoogleDriveDataSource(
     "parcel_locations.csv",
     "Parcel locations",
     "csv with county_name, number, lat, lon",
-    "https://drive.google.com/file/d/1WXSmy6girh9VvBqSFyKK3caukWLq2NEC/view?usp=drive_link",
+    "https://drive.google.com/file/d/1ott9PR6B17jakxZLiu44ygl7yXLVb3ji/view?usp=drive_link",
 )
