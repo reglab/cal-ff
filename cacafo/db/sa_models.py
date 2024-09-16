@@ -139,7 +139,9 @@ class Image(Base):
 
     @classmethod
     def get_images_for_area(cls, geometry: shp.geometry.base.BaseGeometry, session):
-        query = sa.select(cls).where(cls.geometry.intersects(geometry))
+        query = sa.select(cls).where(
+            cls.geometry.intersects(geometry) & cls.label_status != "removed"
+        )
         return session.execute(query).scalars().all()
 
 
