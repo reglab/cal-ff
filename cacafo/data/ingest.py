@@ -257,6 +257,36 @@ def permit(session):
         session.add_all(permits)
 
 
+@ingestor(m.Image)
+def image(session):
+    with open(cacafo.data.source.get("images.csv")) as f:
+        county_name_to_id = {
+            name: id
+            for name, id in session.execute(sa.select(m.County.name, m.County.id)).all()
+        }
+        reader = list(csv.DictReader(f))
+        images = []
+        for line in rich.progress.track(reader, description="Ingesting images"):
+            images.append(
+                m.Image(
+                    name=line["bucket"],
+                    county_id=county_name_to_id[line["county"]],
+                    geometry=shp.box(
+                        float(line["lon_min"]),
+                        float(line["lat_min"]),
+                        float(line["lon_max"]),
+                        float(line["lat_max"]),
+                    ).wkt,
+                    bucket=line["bucket"] or None,
+                )
+            )
+            if len(images) > 50000:
+                session.add_all(images)
+                session.flush()
+                images = []
+        session.add_all(images)
+
+
 @click.command("ingest", help="Ingest data into the database")
 @click.option("--overwrite", is_flag=True)
 @click.option("--add", is_flag=True)

@@ -123,9 +123,7 @@ class Image(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str]
     geometry: Mapped[Geometry] = mapped_column(Geometry("POLYGON"))
-    model_score: Mapped[str]
-    label_status: Mapped[str]
-    stratum: Mapped[str]
+    bucket: Mapped[str] = mapped_column(sa.String, nullable=True)
 
     county_id: Mapped[int] = mapped_column(sa.ForeignKey("county.id"))
     county = relationship("County", back_populates="images")
@@ -137,27 +135,16 @@ class Image(Base):
         "Building", back_populates="image"
     )
 
+    @property
+    def stratum(self):
+        return (self.model_score, self.county.county_group.name)
+
     @classmethod
     def get_images_for_area(cls, geometry: shp.geometry.base.BaseGeometry, session):
         query = sa.select(cls).where(
             cls.geometry.intersects(geometry) & cls.label_status != "removed"
         )
         return session.execute(query).scalars().all()
-
-
-class AnimalTypeAnnotation(Base):
-    __tablename__ = "animal_type_annotation"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    animal_type: Mapped[str]
-    location: Mapped[Geometry] = mapped_column(Geometry("POINT"))
-    facility_id: Mapped[int] = mapped_column(sa.ForeignKey("facility.id"))
-    annotated_on: Mapped[datetime] = mapped_column(sa.DateTime)
-
-    facility_id: Mapped[int] = mapped_column(
-        sa.ForeignKey("facility.id"), nullable=True
-    )
-    facility = relationship("Facility", back_populates="all_animal_type_annotations")
 
 
 class CafoAnnotation(Base):
@@ -173,6 +160,21 @@ class CafoAnnotation(Base):
         sa.ForeignKey("facility.id"), nullable=True
     )
     facility = relationship("Facility", back_populates="all_cafo_annotations")
+
+
+class AnimalTypeAnnotation(Base):
+    __tablename__ = "animal_type_annotation"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    animal_type: Mapped[str]
+    location: Mapped[Geometry] = mapped_column(Geometry("POINT"))
+    facility_id: Mapped[int] = mapped_column(sa.ForeignKey("facility.id"))
+    annotated_on: Mapped[datetime] = mapped_column(sa.DateTime)
+
+    facility_id: Mapped[int] = mapped_column(
+        sa.ForeignKey("facility.id"), nullable=True
+    )
+    facility = relationship("Facility", back_populates="all_animal_type_annotations")
 
 
 class ConstructionAnnotation(Base):

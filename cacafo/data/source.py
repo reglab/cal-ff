@@ -428,3 +428,17 @@ GoogleDriveDataSource(
     "CSV with columns: county, the_geom, lat, lon",
     "https://drive.google.com/file/d/1eF8OuHcobFcxeULsqYdNeuqnP2U7TnZu/view?usp=sharing",
 )
+
+GoogleDriveDataSource(
+    "annotations.jsonl",
+    "Annotations for images in cloud factory JSON format collapsed into lines",
+    "DataLoop-formatted JSON, in lines format",
+    "https://drive.google.com/file/d/1qiJtLL1qaKDsDei6Ye9wNW80NKKacS76/view?usp=drive_link",
+)
+
+GoogleDriveDataSource(
+    "images.csv",
+    "List of images in the dataset with geometries and bayes scores",
+    "CSV with columns: name, county, bucket, lat_min, lat_max, lon_min, lon_max",
+    "https://drive.google.com/file/d/1yHB4JQTYCrE4tGytjd9yUnqpSwsh267K/view?usp=sharing",
+)
