@@ -1,4 +1,6 @@
 import csv
+import datetime
+import json
 import typing as t
 from dataclasses import dataclass
 
@@ -269,7 +271,7 @@ def image(session):
         for line in rich.progress.track(reader, description="Ingesting images"):
             images.append(
                 m.Image(
-                    name=line["bucket"],
+                    name=line["name"],
                     county_id=county_name_to_id[line["county"]],
                     geometry=shp.box(
                         float(line["lon_min"]),
@@ -285,6 +287,34 @@ def image(session):
                 session.flush()
                 images = []
         session.add_all(images)
+
+
+def _dig(d: t.Sequence, *keys: list[t.Any]) -> t.Any:
+    if not keys:
+        return d
+    try:
+        return _dig(d[keys[0]], *keys[1:])
+    except (KeyError, IndexError):
+        return None
+
+
+@ingestor(m.ImageAnnotation)
+def image_annotation(session):
+    with open(cacafo.data.source.get("annotations.jsonl")) as f:
+        annotations = []
+        lines = [json.loads(line) for line in f.readlines() if line.strip()]
+        for line in rich.progress.track(
+            lines, description="Ingesting image annotations"
+        ):
+            annotations.append(
+                m.ImageAnnotation(
+                    data=line,
+                    annotated_at=datetime.datetime.fromisoformat(
+                        _dig(line, "annotations", 0, "createdAt") or line["createdAt"]
+                    ),
+                )
+            )
+        session.add_all(annotations)
 
 
 @click.command("ingest", help="Ingest data into the database")

@@ -158,6 +158,34 @@ def permit_registered_location_parcel_id(session):
     )
 
 
+@joiner(m.ImageAnnotation.image_id)
+def image_annotation_image_id(session):
+    click.secho("Joining image annotations to images...", fg="blue")
+    query = (
+        sa.select(m.ImageAnnotation.id, m.ImageAnnotation.data["filename"])
+        .select_from(m.ImageAnnotation)
+        .where(m.ImageAnnotation.image_id.is_(None))
+    )
+    image_name_to_id = {
+        name: id
+        for id, name in session.execute(
+            sa.select(m.Image.id, m.Image.name).select_from(m.Image)
+        ).fetchall()
+    }
+    values = [
+        {
+            "id": annotation_id,
+            "image_id": image_name_to_id[filename.split("/")[-1].replace(".jpeg", "")],
+        }
+        for annotation_id, filename in session.execute(query)
+    ]
+    click.secho(f"Updating {len(values)} rows...", fg="blue")
+    session.execute(
+        sa.update(m.ImageAnnotation),
+        values,
+    )
+
+
 @click.command(
     "join", help="Fill in foreign key columns by joining data from other tables."
 )

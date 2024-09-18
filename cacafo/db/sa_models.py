@@ -147,6 +147,17 @@ class Image(Base):
         return session.execute(query).scalars().all()
 
 
+class ImageAnnotation(Base):
+    __tablename__ = "image_annotation"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    annotated_at: Mapped[datetime] = mapped_column(sa.DateTime)
+    data: Mapped[dict] = mapped_column(sa.JSON)
+
+    image_id: Mapped[int] = mapped_column(sa.ForeignKey("image.id"), nullable=True)
+    image = relationship("Image", back_populates="annotations")
+
+
 class CafoAnnotation(Base):
     __tablename__ = "cafo_annotation"
 
@@ -203,16 +214,6 @@ class ParcelOwnerRelationshipAnnotations(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     owner_name: Mapped[str]
     related_owner_name: Mapped[str]
-
-
-class ImageAnnotation(Base):
-    __tablename__ = "image_annotation"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    data: Mapped[dict] = mapped_column(sa.JSON)
-
-    image_id: Mapped[int] = mapped_column(sa.ForeignKey("image.id"))
-    image = relationship("Image", back_populates="annotations")
 
 
 class Building(Base):
