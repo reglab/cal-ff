@@ -317,6 +317,52 @@ def image_annotation(session):
         session.add_all(annotations)
 
 
+def _get_date(date: str, round_down: bool = False) -> t.Optional[datetime.datetime]:
+    if date == "-" or not date:
+        return None
+    if round_down:
+        return datetime.datetime.fromisoformat(f"{date}-01-01")
+    return datetime.datetime.fromisoformat(f"{date}-12-31")
+
+
+@ingestor(m.ConstructionAnnotation)
+def construction_annotation(session):
+    with open(cacafo.data.source.get("construction_dating.csv")) as f:
+        annotations = []
+        lines = [line for line in csv.DictReader(f)]
+        for line in rich.progress.track(
+            lines, description="Ingesting construction annotations"
+        ):
+            if _get_date(line["construction_upper"]) is None:
+                continue
+            annotations.append(
+                m.ConstructionAnnotation(
+                    data=line,
+                    location=shp.geometry.Point(
+                        float(line["longitude"]), float(line["latitude"])
+                    ).wkt,
+                    construction_lower_bound=_get_date(line["construction_lower"]),
+                    construction_upper_bound=_get_date(
+                        line["construction_upper"], round_down=True
+                    ),
+                    destruction_lower_bound=_get_date(line["destruction_lower"]),
+                    destruction_upper_bound=_get_date(
+                        line["destruction_upper"], round_down=True
+                    ),
+                    significant_population_change=line[
+                        "significant_animal_population_change"
+                    ].lower()
+                    == "true",
+                    is_primarily_indoors="indoor" in line["where_animals_stay"],
+                    has_lagoon=line["has_lagoon"].lower() == "true",
+                    annotated_on=datetime.datetime.strptime(
+                        line["processed_on"], "%m/%d/%Y"
+                    ),
+                )
+            )
+        session.add_all(annotations)
+
+
 @click.command("ingest", help="Ingest data into the database")
 @click.option("--overwrite", is_flag=True)
 @click.option("--add", is_flag=True)

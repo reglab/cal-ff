@@ -442,3 +442,10 @@ GoogleDriveDataSource(
     "CSV with columns: name, county, bucket, lat_min, lat_max, lon_min, lon_max",
     "https://drive.google.com/file/d/1yHB4JQTYCrE4tGytjd9yUnqpSwsh267K/view?usp=sharing",
 )
+
+GoogleDriveDataSource(
+    "construction_dating.csv",
+    "Construction dating annotations",
+    "CSV with columns: processing date, annotator, cafo id, cafo uuid, latitude, longitude, lat/lon,...",
+    "https://drive.google.com/file/d/1-Oeb7XUE-UCXVO0LYIbxLxRlzxV1yOJy/view?usp=sharing",
+)

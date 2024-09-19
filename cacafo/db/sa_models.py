@@ -193,14 +193,21 @@ class ConstructionAnnotation(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     location: Mapped[Geometry] = mapped_column(Geometry("POINT"))
-    construction_lower_bound: Mapped[datetime] = mapped_column(sa.DateTime)
+    construction_lower_bound: Mapped[datetime] = mapped_column(
+        sa.DateTime, nullable=True
+    )
     construction_upper_bound: Mapped[datetime] = mapped_column(sa.DateTime)
-    destruction_lower_bound: Mapped[datetime] = mapped_column(sa.DateTime)
-    destruction_upper_bound: Mapped[datetime] = mapped_column(sa.DateTime)
+    destruction_lower_bound: Mapped[datetime] = mapped_column(
+        sa.DateTime, nullable=True
+    )
+    destruction_upper_bound: Mapped[datetime] = mapped_column(
+        sa.DateTime, nullable=True
+    )
     significant_population_change: Mapped[bool] = mapped_column(sa.Boolean)
     is_primarily_indoors: Mapped[bool] = mapped_column(sa.Boolean)
     has_lagoon: Mapped[bool] = mapped_column(sa.Boolean)
     annotated_on: Mapped[datetime] = mapped_column(sa.DateTime)
+    data: Mapped[dict] = mapped_column(sa.JSON)
 
     facility_id: Mapped[int] = mapped_column(
         sa.ForeignKey("facility.id"), nullable=True
