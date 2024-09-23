@@ -166,6 +166,7 @@ class CafoAnnotation(Base):
     is_afo: Mapped[bool]
     location: Mapped[Geometry] = mapped_column(Geometry("POINT"))
     annotated_on: Mapped[datetime] = mapped_column(sa.DateTime)
+    annotated_by: Mapped[str] = mapped_column(sa.String, nullable=True)
 
     facility_id: Mapped[int] = mapped_column(
         sa.ForeignKey("facility.id"), nullable=True
@@ -222,6 +223,9 @@ class ParcelOwnerRelationshipAnnotations(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     owner_name: Mapped[str]
     related_owner_name: Mapped[str]
+    matched: Mapped[bool]
+    annotated_on: Mapped[datetime] = mapped_column(sa.DateTime)
+    annotated_by: Mapped[str] = mapped_column(sa.String)
 
 
 class Building(Base):

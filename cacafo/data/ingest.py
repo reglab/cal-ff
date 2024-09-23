@@ -393,10 +393,89 @@ def animal_type_annotation(session):
         session.commit()
 
 
+@ingestor(m.CafoAnnotation)
+def cafo_annotation(session):
+    # first ingest from animal typing, then from construction
+    with open(cacafo.data.source.get("animal_typing.csv")) as f:
+        animal_typing = list(csv.DictReader(f))
+        cafo_annotations = []
+        for line in rich.progress.track(
+            animal_typing, description="Ingesting CAFO annotations from animal typing"
+        ):
+            if not line["is_cafo"] and not line["is_afo"]:
+                continue
+            is_afo = "n" not in line["is_afo"].lower()
+            is_cafo = is_afo and ("n" not in line["is_cafo"].lower())
+            # we used to consider feedlots not CAFOs
+            # but now we do
+            if is_afo and "feedlot" in line["notes"].lower():
+                is_cafo = True
+            if line["is_cafo"].lower() == "true":
+                cafo_annotations.append(
+                    m.CafoAnnotation(
+                        location=shp.geometry.Point(
+                            float(line["longitude"]), float(line["latitude"])
+                        ).wkt,
+                        annotated_on=datetime.datetime.fromisoformat(
+                            line["annotated_before"]
+                        ),
+                        annotated_by=line["labeler"],
+                        is_cafo=is_cafo,
+                        is_afo=is_afo,
+                        annotated_by_cafo=line["labeler"],
+                    )
+                )
+        session.add_all(cafo_annotations)
+    with open(cacafo.data.source.get("construction_dating.csv")) as f:
+        construction_annotations = list(csv.DictReader(f))
+        for line in rich.progress.track(
+            construction_annotations,
+            description="Ingesting CAFO annotations from construction dating",
+        ):
+            if line["is_cafo"].lower() == "true":
+                cafo_annotations.append(
+                    m.CafoAnnotation(
+                        location=shp.geometry.Point(
+                            float(line["longitude"]), float(line["latitude"])
+                        ).wkt,
+                        annotated_on=datetime.datetime.strptime(
+                            line["processed_on"], "%m/%d/%Y"
+                        ),
+                        is_cafo=True,
+                        is_afo=True,
+                        annotated_by=line["annotator"],
+                    )
+                )
+        session.add_all(cafo_annotations)
+        session.commit()
+
+
+def status():
+    # check if all tables are populated
+    session = get_sqlalchemy_session()
+    subclasses = m.Base.__subclasses__()
+    for model in subclasses:
+        if not _is_populated(session, model):
+            click.secho(
+                f"Table {model} is not populated",
+                fg="red",
+            )
+        else:
+            click.secho(
+                f"Table {model} is populated",
+                fg="green",
+            )
+
+
 @click.command("ingest", help="Ingest data into the database")
 @click.option("--overwrite", is_flag=True)
 @click.option("--add", is_flag=True)
-@click.argument("tablename", type=click.Choice(Ingestor.instances.keys()))
+@click.argument(
+    "tablename", type=click.Choice(list(Ingestor.instances.keys()) + ["status"])
+)
 def _cli(tablename, overwrite, add):
+    if tablename == "status":
+        status()
+        return
     ingestor = Ingestor.instances[tablename]
     ingestor.func(overwrite=overwrite, add=add)
