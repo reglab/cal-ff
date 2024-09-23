@@ -212,7 +212,7 @@ def get(name):
     return DataSource.data_sources[name].get()
 
 
-def list():
+def ls():
     return DataSource.data_sources.keys()
 
 
@@ -354,22 +354,6 @@ GoogleDriveDataSource(
     "https://drive.google.com/file/d/1bNppgyWXqaBfdFIXyPMTlaKCDQdNyiJz/view?usp=sharing",
 )
 
-for worksheet in (
-    "facilities_w_no_animal_type_or_permit",
-    "facilities_w_no_animal_type_or_permit_v2",
-    "facilities_still_without_animal_types",
-    "facilities_w_two_or_more_types",
-    "animal_typing_2024-06-10",
-):
-    GoogleSheetsDataSource(
-        f"new_animal_typing/{worksheet}.csv",
-        "Facilities with no animal type or permit",
-        "CSV with columns: id,uuid,latitude,longitude,coords,labler,isAFO?,isCAFO?,animal type,subtype,notes",
-        "https://docs.google.com/spreadsheets/d/1Ynj9h2iBnvvxQx_IGskpcVl5bU7ezD-DQQKJLfgS-tE/edit?usp=sharing",
-        worksheet_title=worksheet,
-    )
-
-
 GoogleDriveFolderDataSource(
     "parcels/polygon-centroids-merge-v2",
     "Polygon centroids matched to parcels",
@@ -448,4 +432,43 @@ GoogleDriveDataSource(
     "Construction dating annotations",
     "CSV with columns: processing date, annotator, cafo id, cafo uuid, latitude, longitude, lat/lon,...",
     "https://drive.google.com/file/d/1-Oeb7XUE-UCXVO0LYIbxLxRlzxV1yOJy/view?usp=sharing",
+)
+
+################ Raw animal type labels ################
+
+GoogleSheetsDataSource(
+    "animal_typing/2023-09-21_types.csv",
+    "animal type labels",
+    "CSV with columns: facility_i,gmaps_link,lat,lon,is_afo,is_cafo,animal_type,notes",
+    "https://docs.google.com/spreadsheets/d/1mOeD_cIXF2h_lcNbtdHl367E-qUJ-kc6wGGfLVWmpr8/edit?usp=sharing",
+)
+
+GoogleSheetsDataSource(
+    "animal_typing/2022-12-09_types.csv",
+    "animal type labels",
+    "cafo_index,jpeg_path,tif_path,x_min,y_min,x_max,y_max,lat_min,lon_min,lat_max,lon_max,class_id,class_name,latitude,longitude,parcelnumb,gmaps_link,labeler,animal_farm,is_cafo,type,subtype,notes",
+    "https://docs.google.com/spreadsheets/d/11vV_ZNapbICojLfzuDLzq8ckgE0IBu5JYdhuFKMNTqk/edit?usp=sharing",
+)
+
+for worksheet in (
+    "facilities_w_no_animal_type_or_permit",
+    "facilities_w_no_animal_type_or_permit_v2",
+    "facilities_still_without_animal_types",
+    "facilities_w_two_or_more_types",
+    "animal_typing_2024-06-10",
+):
+    GoogleSheetsDataSource(
+        f"animal_typing/{worksheet}.csv",
+        "Facilities with no animal type or permit",
+        "CSV with columns: id,uuid,latitude,longitude,coords,labler,isAFO?,isCAFO?,animal type,subtype,notes",
+        "https://docs.google.com/spreadsheets/d/1Ynj9h2iBnvvxQx_IGskpcVl5bU7ezD-DQQKJLfgS-tE/edit?usp=sharing",
+        worksheet_title=worksheet,
+    )
+
+
+GoogleDriveDataSource(
+    "animal_typing.csv",
+    "animal type labels",
+    "CSV with columns annotated_before, latitude, longitude, is_afo, is_cafo, type,secondary_type,subtype,notes",
+    "https://drive.google.com/file/d/1k8iLIGzpFPDI5O5I5sGnEYKlhdpJODN1/view?usp=sharing",
 )

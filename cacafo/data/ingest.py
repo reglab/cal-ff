@@ -363,6 +363,36 @@ def construction_annotation(session):
         session.add_all(annotations)
 
 
+@ingestor(m.AnimalTypeAnnotation)
+def animal_type_annotation(session):
+    with open(cacafo.data.source.get("animal_typing.csv")) as f:
+        reader = list(csv.DictReader(f))
+        animal_types = []
+        for line in rich.progress.track(reader, description="Ingesting animal types"):
+            for label in (
+                line["type"],
+                line["secondary_type"],
+                line["subtype"],
+            ):
+                if not label:
+                    continue
+                animal_types.append(
+                    m.AnimalTypeAnnotation(
+                        animal_type=label,
+                        location=shp.geometry.Point(
+                            float(line["longitude"]), float(line["latitude"])
+                        ).wkt,
+                        annotated_on=datetime.datetime.fromisoformat(
+                            line["annotated_before"]
+                        ),
+                        annotated_by=line["labeler"],
+                        notes=line["notes"],
+                    )
+                )
+        session.add_all(animal_types)
+        session.commit()
+
+
 @click.command("ingest", help="Ingest data into the database")
 @click.option("--overwrite", is_flag=True)
 @click.option("--add", is_flag=True)

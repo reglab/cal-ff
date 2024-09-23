@@ -179,8 +179,9 @@ class AnimalTypeAnnotation(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     animal_type: Mapped[str]
     location: Mapped[Geometry] = mapped_column(Geometry("POINT"))
-    facility_id: Mapped[int] = mapped_column(sa.ForeignKey("facility.id"))
     annotated_on: Mapped[datetime] = mapped_column(sa.DateTime)
+    annotated_by: Mapped[str] = mapped_column(sa.String)
+    notes: Mapped[str] = mapped_column(sa.String)
 
     facility_id: Mapped[int] = mapped_column(
         sa.ForeignKey("facility.id"), nullable=True
