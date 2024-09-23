@@ -217,8 +217,8 @@ class ConstructionAnnotation(Base):
     facility = relationship("Facility", back_populates="all_construction_annotations")
 
 
-class ParcelOwnerRelationshipAnnotations(Base):
-    __tablename__ = "parcel_owner_name_annotations"
+class ParcelOwnerNameAnnotation(Base):
+    __tablename__ = "parcel_owner_name_annotation"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     owner_name: Mapped[str]

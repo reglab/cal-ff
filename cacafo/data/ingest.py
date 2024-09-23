@@ -450,6 +450,27 @@ def cafo_annotation(session):
         session.commit()
 
 
+@ingestor(m.ParcelOwnerNameAnnotation)
+def parcel_owner_name_annotation(session):
+    with open(cacafo.data.source.get("parcel_name_annotations.csv")) as f:
+        reader = list(csv.DictReader(f))
+        annotations = []
+        for line in rich.progress.track(
+            reader, description="Ingesting parcel owner relationship annotations"
+        ):
+            annotations.append(
+                m.ParcelOwnerNameAnnotation(
+                    owner_name=line["owner_1"],
+                    related_owner_name=line["owner_2"],
+                    matched=bool(int(line["create_override_match"])),
+                    annotated_on=datetime.datetime.fromisoformat(line["annotated_on"]),
+                    annotated_by=line["annotated_by"],
+                )
+            )
+        session.add_all(annotations)
+        session.commit()
+
+
 def status():
     # check if all tables are populated
     session = get_sqlalchemy_session()
