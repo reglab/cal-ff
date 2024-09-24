@@ -1,10 +1,12 @@
 import hashlib
 from datetime import datetime
 
+import geoalchemy2 as ga
 import shapely as shp
 import shapely.wkt as wkt
 import sqlalchemy as sa
 from geoalchemy2 import Geometry
+from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, declarative_base, mapped_column, relationship
 
 Base = declarative_base()
@@ -58,7 +60,7 @@ class Parcel(Base):
     owner: Mapped[str]
     address: Mapped[str]
     number: Mapped[str]
-    data: Mapped[dict] = mapped_column(sa.JSON)
+    data: Mapped[dict] = mapped_column(JSON)
     inferred_geometry: Mapped[Geometry] = mapped_column(
         Geometry("POLYGON"), nullable=True
     )
@@ -91,7 +93,7 @@ class Permit(Base):
     __tablename__ = "permit"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    data: Mapped[dict] = mapped_column(sa.JSON)
+    data: Mapped[dict] = mapped_column(JSON)
     registered_location: Mapped[Geometry] = mapped_column(
         Geometry("POINT"), nullable=True
     )
@@ -136,6 +138,14 @@ class Image(Base):
     )
 
     @property
+    def label_status(self):
+        if self.bucket is None:
+            return "removed"
+        if not self.annotations:
+            return "unlabeled"
+        return "labeled"
+
+    @property
     def stratum(self):
         return (self.model_score, self.county.county_group.name)
 
@@ -146,13 +156,33 @@ class Image(Base):
         )
         return session.execute(query).scalars().all()
 
+    TILE_SIZE = (1024, 1024)
+
+    def from_xy_to_lat_lon(self, geometry, epsg=4326):
+        import rasterio
+
+        image_geometry = ga.shape.to_shape(self.geometry)
+        transform = rasterio.transform.from_bounds(
+            *image_geometry.bounds,
+            width=self.TILE_SIZE[0],
+            height=self.TILE_SIZE[1],
+        )
+        transformed_geometry = shp.ops.transform(
+            lambda x, y: rasterio.transform.xy(transform, x, y),
+            geometry,
+        )
+
+        if epsg != 4326:
+            raise NotImplementedError("Only EPSG 4326 is supported")
+        return transformed_geometry
+
 
 class ImageAnnotation(Base):
     __tablename__ = "image_annotation"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     annotated_at: Mapped[datetime] = mapped_column(sa.DateTime)
-    data: Mapped[dict] = mapped_column(sa.JSON)
+    data: Mapped[dict] = mapped_column(JSON)
 
     image_id: Mapped[int] = mapped_column(sa.ForeignKey("image.id"), nullable=True)
     image = relationship("Image", back_populates="annotations")
@@ -209,7 +239,7 @@ class ConstructionAnnotation(Base):
     is_primarily_indoors: Mapped[bool] = mapped_column(sa.Boolean)
     has_lagoon: Mapped[bool] = mapped_column(sa.Boolean)
     annotated_on: Mapped[datetime] = mapped_column(sa.DateTime)
-    data: Mapped[dict] = mapped_column(sa.JSON)
+    data: Mapped[dict] = mapped_column(JSON)
 
     facility_id: Mapped[int] = mapped_column(
         sa.ForeignKey("facility.id"), nullable=True

@@ -54,6 +54,7 @@ dependencies = [
 	"ruff>=0.6.4",
 	"pgcli>=4.1.0",
 	"pyproj>=3.6.1",
+	"more-itertools>=10.5.0",
 ]
 
 [project.optional-dependencies]
