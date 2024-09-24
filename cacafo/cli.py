@@ -1,9 +1,11 @@
 import logging
+import subprocess
 import sys
 import traceback
 
 import ipdb
 import rich_click as click
+from IPython import start_ipython
 from rich.console import Console
 from rich.traceback import Traceback
 from rl.utils.logger import LOGGER
@@ -101,6 +103,55 @@ def tunnel():
         ),
         shell=True,
     )
+
+
+@cli.command()
+def vd():
+    from cacafo.db.session import get_postgres_uri
+
+    visidata_postgres_uri = get_postgres_uri().replace("postgresql", "postgres")
+    subprocess.run(["vd", visidata_postgres_uri])
+
+
+# ruff: noqa: F401, F841
+@cli.command()
+def shell():
+    import hashlib
+    from datetime import datetime
+
+    import geoalchemy2 as ga
+    import more_itertools as mit
+    import rich.pretty
+    import rl.utils.io
+    import shapely as shp
+    import shapely.wkt as wkt
+    import sqlalchemy as sa
+    from geoalchemy2 import Geometry
+    from rich import print
+    from sqlalchemy.dialects.postgresql import JSON
+
+    import cacafo.db.sa_models as models
+    from cacafo.db.session import get_sqlalchemy_session as get_session
+
+    def vim(string, wrap=True):
+        import os
+        import subprocess
+        import tempfile
+        import textwrap as tw
+
+        editor = os.environ.get("EDITOR", "vim")
+        if wrap:
+            string = tw.fill(string, width=80, replace_whitespace=False)
+        with tempfile.NamedTemporaryFile(mode="w+") as tf:
+            tf.write(string)
+            tf.flush()
+            subprocess.call([editor, tf.name])
+            tf.seek(0)
+            return tf.read()
+
+    m = models
+    s = get_session()
+    start_ipython(argv=[], user_ns=locals())
 
 
 # ruff: noqa: E402
