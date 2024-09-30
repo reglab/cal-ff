@@ -118,8 +118,10 @@ def vd():
 def shell():
     import hashlib
     from datetime import datetime
+    from pathlib import Path
 
     import geoalchemy2 as ga
+    import geopandas as gpd
     import more_itertools as mit
     import rich.pretty
     import rl.utils.io
@@ -127,6 +129,7 @@ def shell():
     import shapely.wkt as wkt
     import sqlalchemy as sa
     from geoalchemy2 import Geometry
+    from geoalchemy2.shape import to_shape
     from rich import print
     from sqlalchemy.dialects.postgresql import JSON
 
