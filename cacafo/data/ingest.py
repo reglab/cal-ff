@@ -14,6 +14,7 @@ from rich.traceback import install
 import cacafo.data.source
 import cacafo.db.sa_models as m
 from cacafo.db.session import get_sqlalchemy_session
+from cacafo.geom import clean_building_geometry
 
 install(show_locals=True)
 
@@ -294,7 +295,7 @@ def _dig(d: t.Sequence, *keys: list[t.Any]) -> t.Any:
         return d
     try:
         return _dig(d[keys[0]], *keys[1:])
-    except (KeyError, IndexError):
+    except (KeyError, IndexError, TypeError):
         return None
 
 
@@ -469,6 +470,77 @@ def parcel_owner_name_annotation(session):
             )
         session.add_all(annotations)
         session.commit()
+
+
+@ingestor(m.Building, depends_on=[m.ImageAnnotation])
+def building(session):
+    annotations = session.execute(sa.select(m.ImageAnnotation)).scalars().all()
+    buildings = []
+    name_to_image = {
+        image.name: image
+        for image in session.execute(sa.select(m.Image)).scalars().all()
+    }
+    for annotation in rich.progress.track(
+        annotations, description="Ingesting buildings"
+    ):
+        data = annotation.data
+        if (len(data["annotations"]) == 1) and (
+            data["annotations"][0]["label"] == "Blank",
+        ):
+            continue
+        image_name = data["name"].split(".")[0].strip("/")
+        image = name_to_image.get(image_name)
+        if isinstance(data["annotations"], str):
+            rich.print(
+                f"[yellow]Skipping {data['name']} because it has a url annotation"
+            )
+            continue
+        for building_annotation in data["annotations"]:
+            if building_annotation["type"] == "box":
+                continue
+            try:
+                pixels = [
+                    (a["x"], a["y"]) for a in building_annotation["coordinates"][0]
+                ]
+            except (KeyError, IndexError):
+                rich.print(
+                    f"[yellow]Skipping {data['name']} because it has no coordinates"
+                )
+                continue
+            if not pixels:
+                rich.print(
+                    f"[yellow]Skipping {data['name']} because it has no coordinates"
+                )
+                continue
+            try:
+                image_xy_poly = clean_building_geometry(shp.Polygon(pixels))
+            except ValueError as ve:
+                if "linearring requires at least 4 coordinates" in str(ve):
+                    rich.print(
+                        f"[yellow]Skipping {data['name']} because it is a linearring"
+                    )
+                    continue
+            geometries = []
+            if isinstance(image_xy_poly, shp.geometry.Polygon):
+                geometries.append(image_xy_poly)
+            elif isinstance(image_xy_poly, shp.geometry.MultiPolygon):
+                geometries += image_xy_poly.geoms
+            else:
+                raise ValueError("Unexpected geometry type")
+            for geometry in geometries:
+                image_latlon_poly = image.from_xy_to_lat_lon(geometry)
+                buildings.append(
+                    m.Building(
+                        image_annotation_id=annotation.id,
+                        excluded_at=None,
+                        exclude_reason=None,
+                        parcel_id=None,
+                        image_xy_geometry=geometry.wkt,
+                        geometry=image_latlon_poly.wkt,
+                    )
+                )
+    session.add_all(buildings)
+    session.commit()
 
 
 def status():

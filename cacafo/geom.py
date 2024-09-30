@@ -3,6 +3,7 @@ from functools import lru_cache
 import geopandas as gpd
 import networkx as nx
 import numpy as np
+import rich
 import shapely as shp
 
 from cacafo.db.models import Building, County, Image
@@ -35,6 +36,34 @@ def mostly_overlapping_buildings():
             else:
                 redundant.append(building.id)
     return set(redundant)
+
+
+def clean_building_geometry(geometry):
+    geometries = [shp.make_valid(geometry)]
+    polygons = []
+    while geometries:
+        geom = geometries.pop()
+        if isinstance(geom, shp.Polygon):
+            if geom.area > 0:
+                polygons.append(shp.ops.orient(geom))
+        elif isinstance(geom, shp.MultiPolygon):
+            geometries.extend(geom.geoms)
+        elif isinstance(geom, shp.LineString) or isinstance(geom, shp.MultiLineString):
+            try:
+                polygons.append(geom.envelope)
+            except ValueError as e:
+                if "linearring requires at least 4 coordinates" in str(e):
+                    continue
+                else:
+                    raise e
+        elif isinstance(geom, shp.GeometryCollection):
+            geometries.extend(geom.geoms)
+        else:
+            raise ValueError(f"Unexpected geometry type {type(geom)}")
+    cleaned_geometry = shp.union_all(polygons)
+    if isinstance(cleaned_geometry, shp.MultiPolygon):
+        rich.print("[yellow]Warning: Building has MultiPolygon geometry[/yellow]")
+    return shp.ops.orient(cleaned_geometry)
 
 
 def clean_facility_geometry(facility):

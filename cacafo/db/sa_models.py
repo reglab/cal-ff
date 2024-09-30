@@ -2,6 +2,7 @@ import hashlib
 from datetime import datetime
 
 import geoalchemy2 as ga
+import rasterio
 import shapely as shp
 import shapely.wkt as wkt
 import sqlalchemy as sa
@@ -133,9 +134,6 @@ class Image(Base):
     annotations: Mapped[list["ImageAnnotation"]] = relationship(
         "ImageAnnotation", back_populates="image"
     )
-    buildings: Mapped[list["Building"]] = relationship(
-        "Building", back_populates="image"
-    )
 
     @property
     def label_status(self):
@@ -159,8 +157,6 @@ class Image(Base):
     TILE_SIZE = (1024, 1024)
 
     def from_xy_to_lat_lon(self, geometry, epsg=4326):
-        import rasterio
-
         image_geometry = ga.shape.to_shape(self.geometry)
         transform = rasterio.transform.from_bounds(
             *image_geometry.bounds,
@@ -265,11 +261,8 @@ class Building(Base):
     geometry: Mapped[Geometry] = mapped_column(Geometry("POLYGON"))
     image_xy_geometry: Mapped[Geometry] = mapped_column(Geometry("POLYGON"))
 
-    parcel_id: Mapped[int] = mapped_column(sa.ForeignKey("parcel.id"))
+    parcel_id: Mapped[int] = mapped_column(sa.ForeignKey("parcel.id"), nullable=True)
     parcel = relationship("Parcel", back_populates="buildings")
-
-    image_id: Mapped[int] = mapped_column(sa.ForeignKey("image.id"))
-    image = relationship("Image", back_populates="buildings")
 
     excluded_at: Mapped[datetime] = mapped_column(sa.DateTime, nullable=True)
     exclude_reason: Mapped[str] = mapped_column(sa.String, nullable=True)
@@ -284,6 +277,11 @@ class Building(Base):
         sa.ForeignKey("facility.id"), nullable=True
     )
     facility = relationship("Facility", back_populates="all_buildings")
+
+    image_annotation_id: Mapped[int] = mapped_column(
+        sa.ForeignKey("image_annotation.id"), nullable=False
+    )
+    image_annotation = relationship("ImageAnnotation")
 
 
 class BuildingRelationship(Base):
