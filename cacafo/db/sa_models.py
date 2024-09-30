@@ -164,7 +164,7 @@ class Image(Base):
             height=self.TILE_SIZE[1],
         )
         transformed_geometry = shp.ops.transform(
-            lambda x, y: rasterio.transform.xy(transform, x, y),
+            lambda x, y: rasterio.transform.xy(transform, y, x),
             geometry,
         )
 
