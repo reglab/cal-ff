@@ -55,6 +55,7 @@ dependencies = [
 	"pgcli>=4.1.0",
 	"pyproj>=3.6.1",
 	"more-itertools>=10.5.0",
+	"thefuzz>=0.22.1",
 ]
 
 [project.optional-dependencies]

@@ -4,6 +4,8 @@ import json
 import typing as t
 from dataclasses import dataclass
 
+import geoalchemy2 as ga
+import numpy as np
 import pyproj
 import rich.progress
 import rich_click as click
@@ -13,14 +15,12 @@ from rich.traceback import install
 
 import cacafo.data.source
 import cacafo.db.sa_models as m
+import cacafo.owner_name_matching
+from cacafo.constants import CA_SRID, DEFAULT_SRID
 from cacafo.db.session import get_sqlalchemy_session
 from cacafo.geom import clean_building_geometry
 
 install(show_locals=True)
-
-
-DEFAULT_EPSG = 4326
-CA_EPSG = 3311
 
 
 def _is_populated(session, model):
@@ -192,8 +192,8 @@ def parcel(session):
                 parcels[(county, number)].inferred_geometry = shp.geometry.Point(
                     float(lon), float(lat)
                 )
-    to_meters = pyproj.Transformer.from_crs(DEFAULT_EPSG, CA_EPSG, always_xy=True)
-    to_latlon = pyproj.Transformer.from_crs(CA_EPSG, DEFAULT_EPSG, always_xy=True)
+    to_meters = pyproj.Transformer.from_crs(DEFAULT_SRID, CA_SRID, always_xy=True)
+    to_latlon = pyproj.Transformer.from_crs(CA_SRID, DEFAULT_SRID, always_xy=True)
     for parcel in rich.progress.track(
         parcels.values(), description="Processing geometries"
     ):
@@ -543,8 +543,113 @@ def building(session):
     session.commit()
 
 
+def _add_distance_relationships(session):
+    buildings = session.execute(
+        sa.select(
+            m.Building.id.label("building_id"),
+            sa.func.ST_Transform(
+                sa.cast(m.Building.geometry, ga.Geometry),
+                CA_SRID,
+            ).label("geometry"),
+        ).order_by(m.Building.id)
+    ).all()
+    building_ids = [b[0] for b in buildings]
+    geometries = [ga.shape.to_shape(b[1]) for b in buildings]
+    tree = shp.STRtree(geometries)
+    input_idxs, tree_idxs = tree.query(geometries, predicate="dwithin", distance=1000)
+    distances = np.array(
+        [geometries[i].distance(geometries[j]) for i, j in zip(input_idxs, tree_idxs)]
+    )
+    to_create = []
+    for input_idx, tree_idx, distance in rich.progress.track(
+        zip(input_idxs, tree_idxs, distances),
+        description="Building distance relationships",
+        total=len(input_idxs),
+    ):
+        if input_idx == tree_idx:
+            continue
+        to_create.append(
+            m.BuildingRelationship(
+                building_id=building_ids[input_idx],
+                related_building_id=building_ids[tree_idx],
+                reason="distance",
+                weight=1000 - int(distance),
+            )
+        )
+        if len(to_create) > 1000:
+            session.add_all(to_create)
+            session.flush()
+            to_create = []
+    session.add_all(to_create)
+    session.flush()
+
+
+@ingestor(m.BuildingRelationship, depends_on=[m.Building])
+def building_relationship(session):
+    # _add_distance_relationships(session)
+    building_relationships = list(
+        session.execute(
+            sa.select(m.BuildingRelationship).where(
+                m.BuildingRelationship.reason == "distance"
+            )
+        )
+        .scalars()
+        .all()
+    )
+    building_id_to_parcel_owner_name = {
+        building.id: building.parcel.owner
+        for building in session.execute(
+            sa.select(m.Building)
+            .options(sa.orm.joinedload(m.Building.parcel))
+            .where(m.Building.parcel_id.is_not(None))
+        ).scalars()
+    }
+    all_owner_names = set(building_id_to_parcel_owner_name.values())
+
+    def _tfidf(owner1, owner2):
+        cacafo.owner_name_matching.tf_idf(all_owner_names, owner1, owner2)
+
+    for building_relationship in rich.progress.track(
+        building_relationships, description="Building relationships"
+    ):
+        name_map = {
+            cacafo.owner_name_matching.fuzzy: "fuzzy",
+            _tfidf: "tf-idf",
+            cacafo.owner_name_matching.annotation: "parcel owner annotation",
+        }
+        to_create = []
+        for method in name_map.keys():
+            if (
+                building_relationship.building_id
+                not in building_id_to_parcel_owner_name
+                or building_relationship.related_building_id
+                not in building_id_to_parcel_owner_name
+            ):
+                continue
+            to_create.append(
+                m.BuildingRelationship(
+                    building_id=building_relationship.building_id,
+                    related_building_id=building_relationship.related_building_id,
+                    reason=name_map[method],
+                    weight=method(
+                        building_id_to_parcel_owner_name[
+                            building_relationship.building_id
+                        ],
+                        building_id_to_parcel_owner_name[
+                            building_relationship.related_building_id
+                        ],
+                    ),
+                )
+            )
+            if len(to_create) > 1000:
+                session.add_all(to_create)
+                session.flush()
+                to_create = []
+        session.add_all(to_create)
+    session.commit()
+
+
 def status():
-    # check if all tables are populated
     session = get_sqlalchemy_session()
     subclasses = m.Base.__subclasses__()
     for model in subclasses:

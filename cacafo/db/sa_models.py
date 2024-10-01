@@ -6,9 +6,11 @@ import rasterio
 import shapely as shp
 import shapely.wkt as wkt
 import sqlalchemy as sa
-from geoalchemy2 import Geometry
+from geoalchemy2 import Geography, Geometry
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, declarative_base, mapped_column, relationship
+
+from cacafo.constants import DEFAULT_SRID
 
 Base = declarative_base()
 
@@ -29,7 +31,9 @@ class County(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str]
-    geometry: Mapped[Geometry] = mapped_column(Geometry("MULTIPOLYGON"))
+    geometry: Mapped[Geography] = mapped_column(
+        Geography("MULTIPOLYGON", srid=DEFAULT_SRID)
+    )
 
     county_group_id: Mapped[int] = mapped_column(sa.ForeignKey("county_group.id"))
     county_group: Mapped[CountyGroup] = relationship(
@@ -62,8 +66,8 @@ class Parcel(Base):
     address: Mapped[str]
     number: Mapped[str]
     data: Mapped[dict] = mapped_column(JSON)
-    inferred_geometry: Mapped[Geometry] = mapped_column(
-        Geometry("POLYGON"), nullable=True
+    inferred_geometry: Mapped[Geography] = mapped_column(
+        Geography("POLYGON", srid=DEFAULT_SRID), nullable=True
     )
 
     county_id: Mapped[int] = mapped_column(sa.ForeignKey("county.id"))
@@ -95,11 +99,11 @@ class Permit(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     data: Mapped[dict] = mapped_column(JSON)
-    registered_location: Mapped[Geometry] = mapped_column(
-        Geometry("POINT"), nullable=True
+    registered_location: Mapped[Geography] = mapped_column(
+        Geography("POINT", srid=DEFAULT_SRID), nullable=True
     )
-    geocoded_address_location: Mapped[Geometry] = mapped_column(
-        Geometry("POINT"), nullable=True
+    geocoded_address_location: Mapped[Geography] = mapped_column(
+        Geography("POINT", srid=DEFAULT_SRID), nullable=True
     )
 
     registered_location_parcel_id: Mapped[int] = mapped_column(
@@ -125,7 +129,7 @@ class Image(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str]
-    geometry: Mapped[Geometry] = mapped_column(Geometry("POLYGON"))
+    geometry: Mapped[Geography] = mapped_column(Geography("POLYGON", srid=DEFAULT_SRID))
     bucket: Mapped[str] = mapped_column(sa.String, nullable=True)
 
     county_id: Mapped[int] = mapped_column(sa.ForeignKey("county.id"))
@@ -190,7 +194,7 @@ class CafoAnnotation(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     is_cafo: Mapped[bool]
     is_afo: Mapped[bool]
-    location: Mapped[Geometry] = mapped_column(Geometry("POINT"))
+    location: Mapped[Geography] = mapped_column(Geography("POINT", srid=DEFAULT_SRID))
     annotated_on: Mapped[datetime] = mapped_column(sa.DateTime)
     annotated_by: Mapped[str] = mapped_column(sa.String, nullable=True)
 
@@ -205,7 +209,7 @@ class AnimalTypeAnnotation(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     animal_type: Mapped[str]
-    location: Mapped[Geometry] = mapped_column(Geometry("POINT"))
+    location: Mapped[Geography] = mapped_column(Geography("POINT", srid=DEFAULT_SRID))
     annotated_on: Mapped[datetime] = mapped_column(sa.DateTime)
     annotated_by: Mapped[str] = mapped_column(sa.String)
     notes: Mapped[str] = mapped_column(sa.String)
@@ -220,7 +224,7 @@ class ConstructionAnnotation(Base):
     __tablename__ = "construction_annotation"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    location: Mapped[Geometry] = mapped_column(Geometry("POINT"))
+    location: Mapped[Geography] = mapped_column(Geography("POINT", srid=DEFAULT_SRID))
     construction_lower_bound: Mapped[datetime] = mapped_column(
         sa.DateTime, nullable=True
     )
@@ -258,7 +262,7 @@ class Building(Base):
     __tablename__ = "building"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    geometry: Mapped[Geometry] = mapped_column(Geometry("POLYGON"))
+    geometry: Mapped[Geography] = mapped_column(Geography("POLYGON", srid=DEFAULT_SRID))
     image_xy_geometry: Mapped[Geometry] = mapped_column(Geometry("POLYGON"))
 
     parcel_id: Mapped[int] = mapped_column(sa.ForeignKey("parcel.id"), nullable=True)
@@ -289,7 +293,7 @@ class BuildingRelationship(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     reason: Mapped[str] = mapped_column(sa.String)
-    weight: Mapped[float] = mapped_column(sa.Float)
+    weight: Mapped[float] = mapped_column(sa.Float, nullable=True)
 
     building_id: Mapped[int] = mapped_column(sa.ForeignKey("building.id"))
     building = relationship("Building", foreign_keys=[building_id])
@@ -309,22 +313,32 @@ class Facility(Base):
         unique=True,
         default=lambda context: Facility._generate_hash_on_insert(context),
     )
-    geometry: Mapped[Geometry] = mapped_column(Geometry("MULTIPOLYGON"))
+    geometry: Mapped[Geography] = mapped_column(
+        Geography("MULTIPOLYGON", srid=DEFAULT_SRID)
+    )
 
     county_id: Mapped[int] = mapped_column(sa.ForeignKey("county.id"))
     county = relationship("County", back_populates="facilities")
 
     all_animal_type_annotations: Mapped[list["AnimalTypeAnnotation"]] = relationship(
-        "AnimalTypeAnnotation", back_populates="facility"
+        "AnimalTypeAnnotation",
+        back_populates="facility",
+        lazy="selectin",
     )
     all_cafo_annotations: Mapped[list["CafoAnnotation"]] = relationship(
-        "CafoAnnotation", back_populates="facility"
+        "CafoAnnotation",
+        back_populates="facility",
+        lazy="selectin",
     )
     all_construction_annotations: Mapped[list["ConstructionAnnotation"]] = relationship(
-        "ConstructionAnnotation", back_populates="facility"
+        "ConstructionAnnotation",
+        back_populates="facility",
+        lazy="selectin",
     )
     all_buildings: Mapped[list["Building"]] = relationship(
-        "Building", back_populates="facility"
+        "Building",
+        back_populates="facility",
+        lazy="selectin",
     )
 
     @staticmethod
