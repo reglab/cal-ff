@@ -586,7 +586,7 @@ def _add_distance_relationships(session):
 
 @ingestor(m.BuildingRelationship, depends_on=[m.Building])
 def building_relationship(session):
-    # _add_distance_relationships(session)
+    _add_distance_relationships(session)
     building_relationships = list(
         session.execute(
             sa.select(m.BuildingRelationship).where(
