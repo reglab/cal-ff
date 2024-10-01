@@ -1,35 +1,35 @@
 WITH "buildingthresholdrelationship" AS (
 	SELECT DISTINCT -- select all buildings matching distance, fuzzy, and tfidf
 		"distancerelationship"."building_id" AS "building_id",
-		"distancerelationship"."other_building_id" AS "other_building_id"
-		FROM "buildingrelationship" as "distancerelationship"
+		"distancerelationship"."related_building_id" AS "related_building_id"
+		FROM "building_relationship" as "distancerelationship"
 		INNER JOIN (
 			SELECT
-				"buildingrelationship"."building_id",
-				"buildingrelationship"."other_building_id"
-			FROM "buildingrelationship"
+				"building_relationship"."building_id",
+				"building_relationship"."related_building_id"
+			FROM "building_relationship"
 			WHERE (
-				("buildingrelationship"."reason" = 'parcel name tf-idf')
-				AND ("buildingrelationship"."weight" > {tfidf})
-				AND ("buildingrelationship"."weight" < {tfidf_max})
+				("building_relationship"."reason" = 'parcel name tf-idf')
+				AND ("building_relationship"."weight" > {tfidf})
+				AND ("building_relationship"."weight" < {tfidf_max})
 			)
 		) AS "parcelnamerelationship" ON (
 			("parcelnamerelationship"."building_id" = "distancerelationship"."building_id")
-			AND ("parcelnamerelationship"."other_building_id" = "distancerelationship"."other_building_id")
+			AND ("parcelnamerelationship"."related_building_id" = "distancerelationship"."related_building_id")
 		)
 		INNER JOIN (
 			SELECT
-				"buildingrelationship"."building_id",
-				"buildingrelationship"."other_building_id"
-			FROM "buildingrelationship"
+				"building_relationship"."building_id",
+				"building_relationship"."related_building_id"
+			FROM "building_relationship"
 			WHERE (
-				("buildingrelationship"."reason" = 'parcel name fuzzy')
-				AND ("buildingrelationship"."weight" > {fuzzy})
-				AND ("buildingrelationship"."weight" < {fuzzy_max})
+				("building_relationship"."reason" = 'parcel name fuzzy')
+				AND ("building_relationship"."weight" > {fuzzy})
+				AND ("building_relationship"."weight" < {fuzzy_max})
 			)
 		) AS "parcelfuzzyrelationship" ON (
 			("parcelfuzzyrelationship"."building_id" = "distancerelationship"."building_id")
-			AND ("parcelfuzzyrelationship"."other_building_id" = "distancerelationship"."other_building_id")
+			AND ("parcelfuzzyrelationship"."related_building_id" = "distancerelationship"."related_building_id")
 		)
 		WHERE (
 			("distancerelationship"."reason" = 'distance')
@@ -37,26 +37,29 @@ WITH "buildingthresholdrelationship" AS (
 		)
 	UNION SELECT DISTINCT -- select all buildings with manual parcel name annotation overrides
 		"t1"."building_id" AS "building_id",
-		"t1"."other_building_id" AS "other_building_id"
-		FROM "buildingrelationship" AS "t1"
+		"t1"."related_building_id" AS "related_building_id"
+		FROM "building_relationship" AS "t1"
 		INNER JOIN (
 			SELECT
-				"buildingrelationship"."building_id",
-				"buildingrelationship"."other_building_id"
-			FROM "buildingrelationship"
+				"building_relationship"."building_id",
+				"building_relationship"."related_building_id"
+			FROM "building_relationship"
 			WHERE (
-				("buildingrelationship"."reason" = 'distance')
-				AND ("buildingrelationship"."weight" > (1000 - {distance}))
+				("building_relationship"."reason" = 'distance')
+				AND ("building_relationship"."weight" > (1000 - {distance}))
 			)
 		) AS "distancerelationship" ON (
 			("distancerelationship"."building_id" = "t1"."building_id")
-			AND ("distancerelationship"."other_building_id" = "t1"."other_building_id")
+			AND ("distancerelationship"."related_building_id" = "t1"."related_building_id")
 		)
-		WHERE ("t1"."reason" = 'parcel name annotation')
+		WHERE (
+			("t1"."reason" = 'parcel owner annotation')
+			AND ("t1"."weight" = 1000)
+		)
 	UNION SELECT DISTINCT -- select all buildings within distance radius and no parcel name
 		"br"."building_id" AS "building_id",
-		"br"."other_building_id" AS "other_building_id"
-		FROM "buildingrelationship" AS "br"
+		"br"."related_building_id" AS "related_building_id"
+		FROM "building_relationship" AS "br"
 		JOIN "building" AS "b" ON ("b"."id" = "br"."building_id")
 		LEFT JOIN "parcel" AS "p" ON ("p"."id" = "b"."parcel_id")
 		WHERE (
@@ -66,27 +69,27 @@ WITH "buildingthresholdrelationship" AS (
 		)
 	UNION SELECT DISTINCT -- select all buildings with a matching parcel
 		"t3"."building_id" AS "building_id",
-		"t3"."other_building_id" AS "other_building_id"
-		FROM "buildingrelationship" AS "t3" WHERE ("t3"."reason" = 'matching parcel')
-), "lonebuildingrelationships" AS (
+		"t3"."related_building_id" AS "related_building_id"
+		FROM "building_relationship" AS "t3" WHERE ("t3"."reason" = 'matching parcel')
+), "lonebuilding_relationships" AS (
 	SELECT DISTINCT
-		"buildingrelationship"."building_id" AS "building_id",
-		"buildingrelationship"."other_building_id" AS "other_building_id"
-		FROM "buildingrelationship"
+		"building_relationship"."building_id" AS "building_id",
+		"building_relationship"."related_building_id" AS "related_building_id"
+		FROM "building_relationship"
 		LEFT JOIN "buildingthresholdrelationship" ON (
-			("buildingthresholdrelationship"."building_id" = "buildingrelationship"."building_id")
+			("buildingthresholdrelationship"."building_id" = "building_relationship"."building_id")
 		)
 		WHERE (
 			("buildingthresholdrelationship"."building_id" IS NULL)
-			AND ("buildingrelationship"."reason" = 'distance')
-			AND ("buildingrelationship"."weight" > (1000 - {lone_building_distance}))
+			AND ("building_relationship"."reason" = 'distance')
+			AND ("building_relationship"."weight" > (1000 - {lone_building_distance}))
 		)
 )
 SELECT DISTINCT
 	"building_id",
-	"other_building_id"
+	"related_building_id"
 	FROM "buildingthresholdrelationship"
 UNION SELECT DISTINCT
 	"building_id",
-	"other_building_id"
-	FROM "lonebuildingrelationships"
+	"related_building_id"
+	FROM "lonebuilding_relationships"
