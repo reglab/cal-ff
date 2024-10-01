@@ -186,6 +186,41 @@ def image_annotation_image_id(session):
     )
 
 
+@joiner(m.Building.parcel_id)
+def building_parcel_id(session):
+    click.secho("Joining buildings to parcels...", fg="blue")
+    query = (
+        sa.select(m.Building.id, m.Parcel.id)
+        .select_from(m.Building)
+        .join(
+            m.Parcel,
+            m.Building.geometry.ST_Intersects(m.Parcel.inferred_geometry),
+        )
+        .where(m.Building.parcel_id.is_(None))
+    )
+    values = [
+        {
+            "id": building_id,
+            "parcel_id": parcel_id,
+        }
+        for building_id, parcel_id in session.execute(query)
+    ]
+    click.secho(f"Updating {len(values)} rows...", fg="blue")
+    session.execute(
+        sa.update(m.Building),
+        values,
+    )
+    unjoined_count = session.execute(
+        sa.select(sa.func.count())
+        .select_from(m.Building)
+        .where(m.Building.parcel_id.is_(None))
+    ).scalar()
+    if unjoined_count > 0:
+        click.secho(
+            f"{unjoined_count} buildings could not be joined to parcels.", fg="yellow"
+        )
+
+
 @click.command(
     "join", help="Fill in foreign key columns by joining data from other tables."
 )
