@@ -48,23 +48,20 @@ def get_building_relationships(
 def dict_of_lists(session=None, drop_excluded_buildings=True, **kwargs):
     if session is None:
         session = get_sqlalchemy_session()
-    dol = {}
     query = get_building_relationships(session=session, **kwargs)
-    excluded_ids = set()
+    condition = True
     if drop_excluded_buildings:
-        excluded_ids = set(
-            building.id
-            for building in session.execute(
-                sa.select(Building).where(Building.excluded_at.is_(None))
-            )
-            .scalars()
-            .all()
-        )
+        condition = Building.excluded_at.is_(None)
+    included_ids = set(
+        building.id
+        for building in session.execute(sa.select(Building).where(condition))
+        .scalars()
+        .all()
+    )
+    dol = {id_: [] for id_ in included_ids}
     for building_id, related_building_id in query:
-        if building_id in excluded_ids or related_building_id in excluded_ids:
+        if building_id not in dol or related_building_id not in dol:
             continue
-        if building_id not in dol:
-            dol[building_id] = []
         dol[building_id].append(related_building_id)
     return dol
 
