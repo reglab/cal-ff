@@ -1,9 +1,11 @@
-import peewee as pw
+import geoalchemy2 as ga
 import rich
 import rich_click as click
+import sqlalchemy as sa
+from shapely import STRtree
 
-import cacafo.db.models as m
-from cacafo.stats.population import estimate_population
+import cacafo.db.sa_models as m
+from cacafo.db.session import get_sqlalchemy_session
 
 checks = {}
 
@@ -16,76 +18,29 @@ def check(expected=None):
 
 
 @check(expected=0)
-def facilities_without_animal_types():
-    return (
-        m.Facility.select()
-        .join(m.FacilityAnimalType, pw.JOIN.LEFT_OUTER)
-        .where(m.FacilityAnimalType.id.is_null())
-        .count()
+def facilities_with_overlapping_bounding_boxes():
+    session = get_sqlalchemy_session()
+    query = sa.select(m.Facility.id, m.Facility.geometry).where(
+        m.Facility.archived_at.is_(None)
     )
+    facilities = session.execute(query).all()
 
+    # Create STRtree
+    tree = STRtree([ga.shape.to_shape(f.geometry).envelope for f in facilities])
 
-@check()
-def permits_without_locations():
-    return (
-        m.Permit.select()
-        .join(m.PermitPermittedLocation)
-        .where(m.PermitPermittedLocation.id.is_null())
-        .count()
-    )
+    results = []
+    for idx, facility in enumerate(facilities):
+        intersecting = tree.query(ga.shape.to_shape(facility.geometry).envelope)
+        for other_idx in intersecting:
+            if idx != other_idx:
+                results.append((facility.id, facilities[other_idx].id))
 
+    for facility_id, other_facility_id in results:
+        rich.print(
+            f"[yellow]{facility_id}'s bounding box intersects with {other_facility_id}'s bounding box[/yellow]"
+        )
 
-@check()
-def facilities_without_any_permits():
-    facilities = (
-        m.Facility.select()
-        .join(m.FacilityPermittedLocation, pw.JOIN.LEFT_OUTER)
-        .where(m.FacilityPermittedLocation.id.is_null())
-    )
-    return facilities.count()
-
-
-@check()
-def num_facilities():
-    return m.Facility.select().count()
-
-
-@check(expected=0)
-def facilities_without_buildings():
-    return (
-        m.Facility.select()
-        .join(m.Building, pw.JOIN.LEFT_OUTER)
-        .where(m.Building.id.is_null())
-        .count()
-    )
-
-
-@check(expected=0)
-def facilities_without_construction_annotations():
-    return (
-        m.Facility.select()
-        .join(m.ConstructionAnnotation, pw.JOIN.LEFT_OUTER)
-        .where(m.ConstructionAnnotation.id.is_null())
-        .count()
-    )
-
-
-@check(expected=0.9948)
-def image_completeness():
-    pop = estimate_population()
-    num_positive_images = (
-        m.Image.select().join(m.Building).where(m.Building.cafo).distinct().count()
-    )
-    return round(num_positive_images / pop.point, 4)
-
-
-@check(expected=0.8478)
-def completeness_lower_bound():
-    pop = estimate_population()
-    num_positive_images = (
-        m.Image.select().join(m.Building).where(m.Building.cafo).distinct().count()
-    )
-    return round(num_positive_images / pop.upper, 4)
+    return len(results)
 
 
 @click.command()
