@@ -157,12 +157,15 @@ def shell():
     start_ipython(argv=[], user_ns=locals())
 
 
+from cacafo.building_relationships import _cli as building_relationships_cli
+
 # ruff: noqa: E402
 from cacafo.check import check
 from cacafo.data.ingest import _cli as ingest_cli
 from cacafo.data.jobs import cmd_jobs
 from cacafo.data.join import _cli as join_cli
 from cacafo.export import _cli as export_cli
+from cacafo.facilities import _cli as facilities_cli
 from cacafo.naip import _cli as naip_cli
 from cacafo.paper import cmd_generate
 from cacafo.reports import _cli as reports_cli
@@ -175,6 +178,8 @@ cli.add_command(naip_cli)
 cli.add_command(reports_cli)
 cli.add_command(ingest_cli)
 cli.add_command(join_cli)
+cli.add_command(facilities_cli)
+cli.add_command(building_relationships_cli)
 
 if __name__ == "__main__":
     cli()

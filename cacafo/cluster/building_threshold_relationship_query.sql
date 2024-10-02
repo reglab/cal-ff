@@ -9,7 +9,7 @@ WITH "buildingthresholdrelationship" AS (
 				"building_relationship"."related_building_id"
 			FROM "building_relationship"
 			WHERE (
-				("building_relationship"."reason" = 'parcel name tf-idf')
+				("building_relationship"."reason" = 'tf-idf')
 				AND ("building_relationship"."weight" > {tfidf})
 				AND ("building_relationship"."weight" < {tfidf_max})
 			)
@@ -23,7 +23,7 @@ WITH "buildingthresholdrelationship" AS (
 				"building_relationship"."related_building_id"
 			FROM "building_relationship"
 			WHERE (
-				("building_relationship"."reason" = 'parcel name fuzzy')
+				("building_relationship"."reason" = 'fuzzy')
 				AND ("building_relationship"."weight" > {fuzzy})
 				AND ("building_relationship"."weight" < {fuzzy_max})
 			)

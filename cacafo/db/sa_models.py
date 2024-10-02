@@ -317,8 +317,10 @@ class Facility(Base):
         Geography("MULTIPOLYGON", srid=DEFAULT_SRID)
     )
 
-    county_id: Mapped[int] = mapped_column(sa.ForeignKey("county.id"))
+    county_id: Mapped[int] = mapped_column(sa.ForeignKey("county.id"), nullable=True)
     county = relationship("County", back_populates="facilities")
+
+    archived_at: Mapped[datetime] = mapped_column(sa.DateTime, nullable=True)
 
     all_animal_type_annotations: Mapped[list["AnimalTypeAnnotation"]] = relationship(
         "AnimalTypeAnnotation",
@@ -341,11 +343,67 @@ class Facility(Base):
         lazy="selectin",
     )
 
+    def to_geojson_feature(self):
+        geom = ga.shape.to_shape(self.geometry)
+        json_geom = shp.geometry.mapping(geom)
+        feature = {
+            "type": "Feature",
+            "geometry": json_geom,
+            "id": str(self.hash),
+        }
+
+        feature["properties"] = {
+            "id": self.id,
+            "hash": self.hash,
+            "latitude": geom.centroid.y,
+            "longitude": geom.centroid.x,
+            "lat_min": geom.bounds[1],
+            "lon_min": geom.bounds[0],
+            "lat_max": geom.bounds[3],
+            "lon_max": geom.bounds[2],
+            "parcels": [
+                {
+                    "id": b.parcel.id,
+                    "owner": b.parcel.owner,
+                    "address": b.parcel.address,
+                    "number": b.parcel.number,
+                    "county": b.parcel.county.name,
+                }
+                for b in self.buildings
+                if b.parcel
+            ],
+            # "best_permits": [permit.data for permit in self.permits],
+            # "all_permits": [
+            #     permit.data
+            #     for building in self.buildings
+            #     for parcel in [building.parcel]
+            #     if parcel
+            #     for permit in parcel.permits
+            # ],
+            "construction_annotation": (
+                {
+                    "id": self.construction_annotation.id,
+                    "construction_lower_bound": self.construction_annotation.construction_lower_bound,
+                    "construction_upper_bound": self.construction_annotation.construction_upper_bound,
+                    "destruction_lower_bound": self.construction_annotation.destruction_lower_bound,
+                    "destruction_upper_bound": self.construction_annotation.destruction_upper_bound,
+                    "significant_population_change": self.construction_annotation.significant_population_change,
+                    "is_primarily_indoors": self.construction_annotation.is_primarily_indoors,
+                    "has_lagoon": self.construction_annotation.has_lagoon,
+                }
+                if self.construction_annotation
+                else None
+            ),
+        }
+        feature["bbox"] = list(geom.bounds)
+        return feature
+
     @staticmethod
     def _generate_hash_on_insert(context):
         params = context.get_current_parameters()
         if params["hash"] is None:
-            params["hash"] = hashlib.md5(params["geometry"].wkt.encode()).hexdigest()
+            params["hash"] = hashlib.md5(params["geometry"].encode()).hexdigest()
+        return params["hash"]
 
     @property
     def animal_types(self):
@@ -377,7 +435,11 @@ class Facility(Base):
 
     @property
     def construction_annotation(self):
-        return max(self.all_construction_annotations, key=lambda x: x.annotated_on)
+        return max(
+            self.all_construction_annotations,
+            key=lambda x: x.annotated_on,
+            default=None,
+        )
 
     @property
     def buildings(self):
