@@ -25,7 +25,7 @@ def create_facilities():
         }
         for building in session.execute(sa.select(m.Building)).scalars().all()
     }
-    for cluster in rich.progress.track(bc, description="Creating facilities"):
+    for cluster in rich.progress.track(list(bc), description="Creating facilities"):
         geom = shp.geometry.MultiPolygon(
             [
                 building_ids_map[building_id]["geometry"]

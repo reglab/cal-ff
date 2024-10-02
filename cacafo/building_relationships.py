@@ -108,18 +108,17 @@ def add_tfidf_relationships(session):
         ):
             continue
 
+        weight = cacafo.owner_name_matching.tf_idf(
+            all_owner_names,
+            building_id_to_parcel_owner_name[building_relationship.building_id],
+            building_id_to_parcel_owner_name[building_relationship.related_building_id],
+        )
         to_create.append(
             m.BuildingRelationship(
                 building_id=building_relationship.building_id,
                 related_building_id=building_relationship.related_building_id,
                 reason="tf-idf",
-                weight=cacafo.owner_name_matching.tf_idf(
-                    all_owner_names,
-                    building_id_to_parcel_owner_name[building_relationship.building_id],
-                    building_id_to_parcel_owner_name[
-                        building_relationship.related_building_id
-                    ],
-                ),
+                weight=weight,
             )
         )
         if len(to_create) > 1000:
@@ -275,7 +274,7 @@ def add_matching_parcel_relationships(session):
                     m.BuildingRelationship(
                         building_id=building_id,
                         related_building_id=related_building_id,
-                        reason="matching_parcel",
+                        reason="matching parcel",
                         weight=100,  # You can adjust this weight as needed
                     )
                 )
@@ -284,8 +283,8 @@ def add_matching_parcel_relationships(session):
                     m.BuildingRelationship(
                         building_id=related_building_id,
                         related_building_id=building_id,
-                        reason="matching_parcel",
-                        weight=100,  # You can adjust this weight as needed
+                        reason="matching parcel",
+                        weight=1000,  # You can adjust this weight as needed
                     )
                 )
 

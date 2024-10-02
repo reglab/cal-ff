@@ -310,7 +310,6 @@ class Facility(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     hash: Mapped[str] = mapped_column(
         sa.String,
-        unique=True,
         default=lambda context: Facility._generate_hash_on_insert(context),
     )
     geometry: Mapped[Geography] = mapped_column(
@@ -319,6 +318,15 @@ class Facility(Base):
 
     county_id: Mapped[int] = mapped_column(sa.ForeignKey("county.id"), nullable=True)
     county = relationship("County", back_populates="facilities")
+
+    __table_args__ = (
+        sa.Index(
+            "uq_facility_hash",
+            "hash",
+            unique=True,
+            postgresql_where=sa.text("archived_at IS NULL"),
+        ),
+    )
 
     archived_at: Mapped[datetime] = mapped_column(sa.DateTime, nullable=True)
 
