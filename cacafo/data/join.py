@@ -1,6 +1,8 @@
 import typing as t
 from dataclasses import dataclass
 
+import rich
+import rich.prompt
 import rich_click as click
 import sqlalchemy as sa
 import sqlalchemy.orm as orm
@@ -226,7 +228,20 @@ def building_parcel_id(session):
 )
 @click.option("--overwrite", is_flag=True)
 @click.option("--add", is_flag=True)
+@click.option("--delete", is_flag=True)
 @click.argument("tablename", type=click.Choice(Joiner.instances.keys()))
-def _cli(tablename, overwrite, add):
+def _cli(tablename, overwrite, add, delete):
     joiner = Joiner.instances[tablename]
+    if delete:
+        # confirm
+        conf = rich.prompt.Confirm.ask(
+            f"Are you sure you want to delete all values in column {joiner.column}?"
+        )
+        if not conf:
+            rich.print("Aborting.")
+            return
+        session = get_sqlalchemy_session()
+        session.execute(joiner.column.table.update().values({joiner.column: None}))
+        session.commit()
+        return
     joiner.func(overwrite=overwrite, add=add)

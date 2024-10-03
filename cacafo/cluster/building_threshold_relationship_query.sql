@@ -9,7 +9,7 @@ WITH "buildingthresholdrelationship" AS (
 				"building_relationship"."related_building_id"
 			FROM "building_relationship"
 			WHERE (
-				("building_relationship"."reason" = 'tf-idf')
+				("building_relationship"."reason" = 'tfidf')
 				AND ("building_relationship"."weight" > 300)
 				AND ("building_relationship"."weight" < 1000)
 			)

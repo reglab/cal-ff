@@ -48,6 +48,96 @@ def create_facilities():
     session.commit()
 
 
+def join_facilities_to_permits(session=None):
+    session = session or get_sqlalchemy_session()
+
+    # Join facilities with permits based on parcels
+    parcel_permit_joins = session.execute(
+        sa.select(m.Facility, m.Permit)
+        .join(m.Building, m.Facility.id == m.Building.facility_id)
+        .join(
+            m.Parcel,
+            (m.Building.parcel_id == m.Parcel.id)
+            & (
+                (m.Permit.registered_location_parcel_id == m.Parcel.id)
+                | (m.Permit.geocoded_address_location_parcel_id == m.Parcel.id)
+            ),
+        )
+        .where(
+            (m.Facility.archived_at.is_(None))
+            & (m.Permit.facility_id.is_(None))
+            & (m.Permit.registered_location_parcel_id.isnot(None))
+            & (m.Permit.geocoded_address_location_parcel_id.isnot(None))
+        )
+        .group_by(m.Facility.id, m.Permit.id)
+        .having(
+            sa.func.count(
+                sa.distinct(
+                    sa.case(
+                        (m.Permit.registered_location_parcel_id == m.Parcel.id, 1),
+                        (
+                            m.Permit.geocoded_address_location_parcel_id == m.Parcel.id,
+                            2,
+                        ),
+                        else_=None,
+                    )
+                )
+            )
+            == 2
+        )
+    ).all()
+
+    # Update facility_id for matched permits
+    for facility, permit in parcel_permit_joins:
+        permit.facility_id = facility.id
+    session.add_all([permit for _, permit in parcel_permit_joins])
+    session.flush()
+
+    # Join remaining permits based on distance
+    distance_permit_joins = session.execute(
+        sa.select(m.Facility, m.Permit)
+        .where(
+            (m.Facility.archived_at.is_(None))
+            & (m.Permit.facility_id.is_(None))
+            & (m.Permit.registered_location.isnot(None))
+            & (m.Permit.geocoded_address_location.isnot(None))
+            & sa.func.ST_DWithin(m.Facility.geometry, m.Permit.registered_location, 200)
+            & sa.func.ST_DWithin(
+                m.Facility.geometry, m.Permit.geocoded_address_location, 200
+            )
+        )
+        .group_by(m.Facility.id, m.Permit.id)
+        .having(
+            ~sa.exists().where(
+                (m.Facility.id != m.Facility.id)
+                & (
+                    sa.func.ST_DWithin(
+                        m.Facility.geometry, m.Permit.registered_location, 200
+                    )
+                    | sa.func.ST_DWithin(
+                        m.Facility.geometry, m.Permit.geocoded_address_location, 200
+                    )
+                )
+            )
+        )
+    ).all()
+
+    # Update facility_id for distance-matched permits
+    for facility, permit in distance_permit_joins:
+        permit.facility_id = facility.id
+    # Commit the changes
+    session.flush()
+    # Print summary
+    click.secho(
+        f"Joined {len(parcel_permit_joins)} permits to facilities based on parcels",
+        fg="green",
+    )
+    click.secho(
+        f"Joined {len(distance_permit_joins)} permits to facilities based on distance",
+        fg="green",
+    )
+
+
 def join_facilities():
     session = get_sqlalchemy_session()
     # Join facilities with CafoAnnotations

@@ -123,6 +123,12 @@ class Permit(Base):
         foreign_keys=[geocoded_address_location_parcel_id],
     )
 
+    facility_id: Mapped[int] = mapped_column(
+        sa.ForeignKey("facility.id"),
+        nullable=True,
+    )
+    facility = relationship("Facility", back_populates="permits")
+
 
 class Image(Base):
     __tablename__ = "image"
@@ -303,6 +309,9 @@ class BuildingRelationship(Base):
 
     __table_args__ = (sa.CheckConstraint("building_id != related_building_id"),)
 
+    def __str__(self):
+        return f"{self.building_id} -> {self.related_building_id} ({self.reason}: {self.weight}))"
+
 
 class Facility(Base):
     __tablename__ = "facility"
@@ -318,6 +327,8 @@ class Facility(Base):
 
     county_id: Mapped[int] = mapped_column(sa.ForeignKey("county.id"), nullable=True)
     county = relationship("County", back_populates="facilities")
+
+    permits: Mapped[list["Permit"]] = relationship("Permit", back_populates="facility")
 
     __table_args__ = (
         sa.Index(
@@ -456,3 +467,7 @@ class Facility(Base):
     @property
     def images(self):
         return [building.image for building in self.buildings if building.image]
+
+    @property
+    def parcels(self):
+        return [building.parcel for building in self.buildings if building.parcel]

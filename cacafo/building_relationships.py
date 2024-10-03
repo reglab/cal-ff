@@ -75,7 +75,7 @@ def add_all_relationships(session):
     add_parcel_owner_annotation_relationships(session)
 
 
-@relationship_type("tf-idf")
+@relationship_type("tfidf")
 def add_tfidf_relationships(session):
     building_relationships = (
         session.execute(
@@ -99,7 +99,7 @@ def add_tfidf_relationships(session):
 
     to_create = []
     for building_relationship in rich.progress.track(
-        building_relationships, description="Building tf-idf relationships"
+        building_relationships, description="Building tfidf relationships"
     ):
         if (
             building_relationship.building_id not in building_id_to_parcel_owner_name
@@ -117,7 +117,7 @@ def add_tfidf_relationships(session):
             m.BuildingRelationship(
                 building_id=building_relationship.building_id,
                 related_building_id=building_relationship.related_building_id,
-                reason="tf-idf",
+                reason="tfidf",
                 weight=weight,
             )
         )

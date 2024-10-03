@@ -43,6 +43,34 @@ def facilities_with_overlapping_bounding_boxes():
     return len(results)
 
 
+@check(expected=0)
+def overlapping_parcels():
+    session = get_sqlalchemy_session()
+    query = sa.select(
+        m.Parcel.id,
+        m.Parcel.inferred_geometry,
+        sa.func.ST_Area(m.Parcel.inferred_geometry).label("area_m2"),
+    ).where(m.Parcel.inferred_geometry.is_not(None))
+    results = list(session.execute(query).all())
+
+    # Create STRtree
+    parcel_geometries = [ga.shape.to_shape(r[1]).envelope for r in results]
+    tree = STRtree(parcel_geometries)
+    idx_1, idx_2 = tree.query(parcel_geometries, predicate="intersects")
+    intersections = [
+        (results[i][0], results[j][0]) for i, j in zip(idx_1, idx_2) if i != j
+    ]
+
+    parcel_id_to_area = {r[0]: r[2] for r in results}
+
+    for parcel_id, other_parcel_id in intersections:
+        rich.print(
+            f"Parcel {parcel_id} area: {parcel_id_to_area[parcel_id] / 1_000_000:.6f} km²"
+        )
+        rich.print(f"[yellow]{parcel_id} intersects with {other_parcel_id}[/yellow]")
+    return len(intersections)
+
+
 @click.command()
 def check():
     for func, expected in checks.items():
