@@ -71,8 +71,8 @@ def overlapping_parcels():
     return len(intersections)
 
 
-@click.command()
-def check():
+@click.command("check", help="Run data validation checks.")
+def _cli():
     for func, expected in checks.items():
         result = func()
         name = func.__name__.replace("_", " ")

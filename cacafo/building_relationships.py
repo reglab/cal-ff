@@ -275,7 +275,7 @@ def add_matching_parcel_relationships(session):
                         building_id=building_id,
                         related_building_id=related_building_id,
                         reason="matching parcel",
-                        weight=100,  # You can adjust this weight as needed
+                        weight=1000,  # You can adjust this weight
                     )
                 )
                 # Create relationship from related_building_id to building_id
@@ -312,6 +312,7 @@ def _cli():
 def create_building_relationships_cli(type: str):
     session = get_sqlalchemy_session()
     BUILDING_RELATIONSHIP_TYPES[type](session)
+    session.commit()
     num_created = session.execute(
         sa.select(sa.func.count(m.BuildingRelationship.id))
     ).scalar()
@@ -323,12 +324,15 @@ def create_building_relationships_cli(type: str):
     "--type",
     type=click.Choice(BUILDING_RELATIONSHIP_TYPES.keys()),
     help="Type of building relationships to delete",
+    default="all",
 )
 def delete_building_relationships_cli(type: str):
     session = get_sqlalchemy_session()
+    condition = True
+    if type != "all":
+        condition = m.BuildingRelationship.reason == type.replace("_", " ")
     num_deleted = session.execute(
-        sa.delete(m.BuildingRelationship).where(
-            m.BuildingRelationship.reason == type.replace("_", " ")
-        )
+        sa.delete(m.BuildingRelationship).where(condition)
     ).rowcount
+    session.commit()
     click.secho(f"Deleted {num_deleted} building relationships", fg="green")

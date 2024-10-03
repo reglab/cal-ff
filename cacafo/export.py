@@ -107,7 +107,7 @@ def export_parcels_geojson(session: Session, output_path: str):
     return df
 
 
-@click.command("export")
+@click.command("export", help="Export data")
 @click.option(
     "--output-path",
     "-o",

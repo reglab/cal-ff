@@ -1,18 +1,13 @@
-import itertools
-import math
 from enum import Enum
 from io import BytesIO
 
 import contextily as ctx
 import diskcache as dc
-import mercantile
-import numpy as np
 import rasterio
 import rasterio.merge
 import rich_click as click
 from google.auth.exceptions import DefaultCredentialsError
 from google.cloud import storage
-from PIL import Image
 from rasterio.crs import CRS
 from tqdm import tqdm
 
@@ -106,40 +101,13 @@ def add_basemap(ax):
                 raise e
     rasterio_datasets = [rasterio.open(dataset) for dataset in datasets]
     output_file = BytesIO()
-    merged = rasterio.merge.merge(rasterio_datasets, dst_path=output_file)
+    rasterio.merge.merge(rasterio_datasets, dst_path=output_file)
     ctx.add_basemap(
         ax,
         source=output_file,
         crs=CRS.from_epsg(3311) if abs(ax.axis()[0]) > 180 else CRS.from_epsg(4326),
     )
     return ax
-
-
-def get_tile(z, x, y):
-    tile = mercantile.Tile(x, y, z)
-    images = get_images_for_area(*mercantile.bounds(tile))
-    names = [image.name for image in images]
-    datasets = []
-    for name in names:
-        print(name)
-        try:
-            datasets.append(download_ca_cafo_naip_image(name, format_=Format.TIF))
-        except Exception as e:
-            if "No such object" in str(e):
-                print(f"Image {name} not found.")
-            else:
-                raise e
-    if not datasets:
-        return None
-    rasterio_datasets = [rasterio.open(dataset) for dataset in datasets]
-    output_file = BytesIO()
-    merged = rasterio.merge.merge(rasterio_datasets, dst_path=output_file)
-    # convert to png
-    img = Image.open(output_file)
-    img = img.convert("RGB")
-    img = np.array(img)
-    img = Image.fromarray(img)
-    return img
 
 
 def list_available_images():
@@ -211,7 +179,7 @@ def copy_blob(
 
 
 def create_subset(prefix, image_names, format_: Format = Format.JPEG):
-    client = _storage_client()
+    _client = _storage_client()
     prefix = prefix.strip("/")
     for image in tqdm(image_names):
         image_path = get_naip_image_path(image, format_)

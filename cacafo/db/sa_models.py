@@ -270,6 +270,11 @@ class Building(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     geometry: Mapped[Geography] = mapped_column(Geography("POLYGON", srid=DEFAULT_SRID))
     image_xy_geometry: Mapped[Geometry] = mapped_column(Geometry("POLYGON"))
+    hash: Mapped[str] = mapped_column(
+        sa.String,
+        default=lambda context: Building._generate_hash_on_insert(context),
+        unique=True,
+    )
 
     parcel_id: Mapped[int] = mapped_column(sa.ForeignKey("parcel.id"), nullable=True)
     parcel = relationship("Parcel", back_populates="buildings")
@@ -292,6 +297,13 @@ class Building(Base):
         sa.ForeignKey("image_annotation.id"), nullable=False
     )
     image_annotation = relationship("ImageAnnotation")
+
+    @staticmethod
+    def _generate_hash_on_insert(context):
+        params = context.get_current_parameters()
+        if params["hash"] is None:
+            params["hash"] = hashlib.md5(params["geometry"].encode()).hexdigest()
+        return params["hash"]
 
 
 class BuildingRelationship(Base):

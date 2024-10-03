@@ -494,8 +494,6 @@ def building(session):
             )
             continue
         for building_annotation in data["annotations"]:
-            if building_annotation["type"] == "box":
-                continue
             try:
                 pixels = [
                     (a["x"], a["y"]) for a in building_annotation["coordinates"][0]
@@ -514,10 +512,9 @@ def building(session):
                 image_xy_poly = clean_building_geometry(shp.Polygon(pixels))
             except ValueError as ve:
                 if "linearring requires at least 4 coordinates" in str(ve):
-                    rich.print(
-                        f"[yellow]Skipping {data['name']} because it is a linearring"
+                    image_xy_poly = clean_building_geometry(
+                        shp.box(*pixels[0], *pixels[1])
                     )
-                    continue
             geometries = []
             if isinstance(image_xy_poly, shp.geometry.Polygon):
                 geometries.append(image_xy_poly)

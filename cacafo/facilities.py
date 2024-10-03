@@ -140,7 +140,14 @@ def join_facilities_to_permits(session=None):
 
 def join_facilities():
     session = get_sqlalchemy_session()
-    # Join facilities with CafoAnnotations
+    join_cafo_annotations(session)
+    join_animal_type_annotations(session)
+    join_construction_annotations(session)
+    join_facility_counties(session)
+    session.commit()
+
+
+def join_cafo_annotations(session):
     cafo_joins = session.execute(
         sa.select(m.Facility, m.CafoAnnotation)
         .join(
@@ -152,17 +159,25 @@ def join_facilities():
         .where(m.Facility.archived_at.is_(None))
     ).all()
 
-    # Check for multiple facility mappings and update facility_id for CafoAnnotations
     cafo_annotation_facilities = {}
-    for facility, cafo_annotation in cafo_joins:
-        if cafo_annotation.id in cafo_annotation_facilities:
-            raise ValueError(
-                f"CafoAnnotation {cafo_annotation.id} maps to multiple facilities"
-            )
-        cafo_annotation_facilities[cafo_annotation.id] = facility.id
+    for facility, cafo_annotation in rich.progress.track(
+        cafo_joins, description="Processing CafoAnnotations"
+    ):
+        if (
+            cafo_annotation.id in cafo_annotation_facilities
+            and ga.shape.to_shape(facility.geometry).area
+            > ga.shape.to_shape(
+                cafo_annotation_facilities[cafo_annotation.id].geometry
+            ).area
+        ):
+            continue
+        cafo_annotation_facilities[cafo_annotation.id] = facility
         cafo_annotation.facility_id = facility.id
 
-    # Join facilities with AnimalTypeAnnotations
+    click.secho(f"Joined {len(cafo_joins)} CafoAnnotations to facilities", fg="green")
+
+
+def join_animal_type_annotations(session):
     animal_type_joins = session.execute(
         sa.select(m.Facility, m.AnimalTypeAnnotation)
         .join(
@@ -174,17 +189,28 @@ def join_facilities():
         .where(m.Facility.archived_at.is_(None))
     ).all()
 
-    # Check for multiple facility mappings and update facility_id for AnimalTypeAnnotations
     animal_type_annotation_facilities = {}
-    for facility, animal_type_annotation in animal_type_joins:
-        if animal_type_annotation.id in animal_type_annotation_facilities:
-            raise ValueError(
-                f"AnimalTypeAnnotation {animal_type_annotation.id} maps to multiple facilities"
-            )
-        animal_type_annotation_facilities[animal_type_annotation.id] = facility.id
+    for facility, animal_type_annotation in rich.progress.track(
+        animal_type_joins, description="Processing AnimalTypeAnnotations"
+    ):
+        if (
+            animal_type_annotation.id in animal_type_annotation_facilities
+            and ga.shape.to_shape(facility.geometry).area
+            > ga.shape.to_shape(
+                animal_type_annotation_facilities[animal_type_annotation.id].geometry
+            ).area
+        ):
+            continue
+        animal_type_annotation_facilities[animal_type_annotation.id] = facility
         animal_type_annotation.facility_id = facility.id
 
-    # Join facilities with ConstructionAnnotations
+    click.secho(
+        f"Joined {len(animal_type_joins)} AnimalTypeAnnotations to facilities",
+        fg="green",
+    )
+
+
+def join_construction_annotations(session):
     construction_joins = session.execute(
         sa.select(m.Facility, m.ConstructionAnnotation)
         .join(
@@ -196,45 +222,58 @@ def join_facilities():
         .where(m.Facility.archived_at.is_(None))
     ).all()
 
-    # Check for multiple facility mappings and update facility_id for ConstructionAnnotations
     construction_annotation_facilities = {}
-    for facility, construction_annotation in construction_joins:
-        if construction_annotation.id in construction_annotation_facilities:
-            raise ValueError(
-                f"ConstructionAnnotation {construction_annotation.id} maps to multiple facilities"
-            )
-        construction_annotation_facilities[construction_annotation.id] = facility.id
+    for facility, construction_annotation in rich.progress.track(
+        construction_joins, description="Processing ConstructionAnnotations"
+    ):
+        if (
+            construction_annotation.id in construction_annotation_facilities
+            and ga.shape.to_shape(facility.geometry).area
+            > ga.shape.to_shape(
+                construction_annotation_facilities[construction_annotation.id].geometry
+            ).area
+        ):
+            continue
+        construction_annotation_facilities[construction_annotation.id] = facility
         construction_annotation.facility_id = facility.id
 
-    # Get the county for each facility
-    facility_counties = session.execute(
-        sa.select(m.Facility, m.County)
-        .join(
-            m.County,
-            m.County.geometry.ST_Contains(
-                sa.cast(m.Facility.geometry, ga.Geometry).ST_Centroid()
-            ),
-        )
-        .where(m.Facility.archived_at.is_(None))
-    ).all()
-
-    # Update facility with county information
-    for facility, county in facility_counties:
-        facility.county_id = county.id
-
-    # Commit the changes
-    session.commit()
-
-    # Print summary
-    click.secho(f"Joined {len(cafo_joins)} CafoAnnotations to facilities", fg="green")
-    click.secho(
-        f"Joined {len(animal_type_joins)} AnimalTypeAnnotations to facilities",
-        fg="green",
-    )
     click.secho(
         f"Joined {len(construction_joins)} ConstructionAnnotations to facilities",
         fg="green",
     )
+
+
+def join_facility_counties(session):
+    facility_counties = session.execute(
+        sa.select(m.Facility, m.Parcel.county_id)
+        .join(m.Building, m.Facility.id == m.Building.facility_id)
+        .join(m.Parcel, m.Building.parcel_id == m.Parcel.id)
+        .where(m.Facility.archived_at.is_(None))
+    ).all()
+
+    county_id_map = {
+        county.id: county
+        for county in session.execute(sa.select(m.County)).scalars().all()
+    }
+
+    facility_counties_dict = {}
+    for facility, county_id in rich.progress.track(
+        facility_counties, description="Processing facility counties"
+    ):
+        if facility.id in facility_counties_dict:
+            facility_counties_dict[facility.id][county_id] = (
+                facility_counties_dict[facility.id].get(county_id, 0) + 1
+            )
+        else:
+            facility_counties_dict[facility.id] = {county_id: 1}
+
+    for facility_id, counties in facility_counties_dict.items():
+        county_id = max(counties, key=counties.get)
+        session.execute(
+            sa.update(m.Facility)
+            .where(m.Facility.id == facility_id)
+            .values(county_id=county_id_map[county_id].id)
+        )
 
 
 @click.group("facilities")

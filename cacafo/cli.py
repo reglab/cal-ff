@@ -160,9 +160,8 @@ def shell():
 from cacafo.building_relationships import _cli as building_relationships_cli
 
 # ruff: noqa: E402
-from cacafo.check import check
+from cacafo.check import _cli as check_cli
 from cacafo.data.ingest import _cli as ingest_cli
-from cacafo.data.jobs import cmd_jobs
 from cacafo.data.join import _cli as join_cli
 from cacafo.export import _cli as export_cli
 from cacafo.facilities import _cli as facilities_cli
@@ -170,10 +169,9 @@ from cacafo.naip import _cli as naip_cli
 from cacafo.paper import cmd_generate
 from cacafo.reports import _cli as reports_cli
 
-cli.add_command(check)
+cli.add_command(check_cli)
 cli.add_command(export_cli)
 cli.add_command(cmd_generate)
-cli.add_command(cmd_jobs)
 cli.add_command(naip_cli)
 cli.add_command(reports_cli)
 cli.add_command(ingest_cli)
