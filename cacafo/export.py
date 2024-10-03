@@ -84,7 +84,7 @@ def export_geojson(session: Session, output_path: str):
     return geojson
 
 
-@exporter("parcels", "csv")
+@exporter("parcels", "geojson")
 def export_parcels_geojson(session: Session, output_path: str):
     query = sa.select(m.Parcel).options(
         sa.orm.joinedload(m.Parcel.county, innerjoin=True)
