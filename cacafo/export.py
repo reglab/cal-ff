@@ -81,7 +81,7 @@ def export_geojson(session: Session, output_path: str):
     }
     with open(output_path, "w") as f:
         json.dump(geojson, f)
-    return geojson
+    return features
 
 
 @exporter("parcels", "geojson")
@@ -133,7 +133,7 @@ def _cli(entity, output_path, format_):
                 format_ = next(iter(formats))
             else:
                 raise click.UsageError(
-                    "Output format must be provided when output path is not provided"
+                    f"Output format must be provided when output path is not provided. Choices are: {', '.join(formats)}"
                 )
         else:
             format_ = output_path.suffix[1:]
