@@ -6,7 +6,7 @@ import seaborn as sns
 import shapely as shp
 from tqdm import tqdm
 
-import naip
+import cacafo.naip as naip
 from cacafo.geom import clean_building_geometry
 
 PROJECT = "RegLab_Prod"

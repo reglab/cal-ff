@@ -128,7 +128,7 @@ class Permit(Base):
         sa.ForeignKey("facility.id"),
         nullable=True,
     )
-    facility = relationship("Facility", back_populates="permits")
+    facility = relationship("Facility", back_populates="best_permits")
 
 
 class Image(Base):
@@ -355,8 +355,6 @@ class Facility(Base):
     county_id: Mapped[int] = mapped_column(sa.ForeignKey("county.id"), nullable=True)
     county = relationship("County", back_populates="facilities")
 
-    permits: Mapped[list["Permit"]] = relationship("Permit", back_populates="facility")
-
     __table_args__ = (
         sa.Index(
             "uq_facility_hash",
@@ -388,6 +386,10 @@ class Facility(Base):
         back_populates="facility",
         lazy="selectin",
     )
+    best_permits: Mapped[list["Permit"]] = relationship(
+        "Permit",
+        primaryjoin="Permit.facility_id == Facility.id",
+    )
 
     def to_geojson_feature(self):
         geom = ga.shape.to_shape(self.geometry)
@@ -397,6 +399,9 @@ class Facility(Base):
             "geometry": json_geom,
             "id": str(self.hash),
         }
+
+        def d2i(dt):
+            return dt and dt.isoformat()
 
         feature["properties"] = {
             "id": self.id,
@@ -429,10 +434,18 @@ class Facility(Base):
             "construction_annotation": (
                 {
                     "id": self.construction_annotation.id,
-                    "construction_lower_bound": self.construction_annotation.construction_lower_bound,
-                    "construction_upper_bound": self.construction_annotation.construction_upper_bound,
-                    "destruction_lower_bound": self.construction_annotation.destruction_lower_bound,
-                    "destruction_upper_bound": self.construction_annotation.destruction_upper_bound,
+                    "construction_lower_bound": d2i(
+                        self.construction_annotation.construction_lower_bound
+                    ),
+                    "construction_upper_bound": d2i(
+                        self.construction_annotation.construction_upper_bound
+                    ),
+                    "destruction_lower_bound": d2i(
+                        self.construction_annotation.destruction_lower_bound
+                    ),
+                    "destruction_upper_bound": d2i(
+                        self.construction_annotation.destruction_upper_bound
+                    ),
                     "significant_population_change": self.construction_annotation.significant_population_change,
                     "is_primarily_indoors": self.construction_annotation.is_primarily_indoors,
                     "has_lagoon": self.construction_annotation.has_lagoon,
@@ -450,6 +463,25 @@ class Facility(Base):
         if params["hash"] is None:
             params["hash"] = hashlib.md5(params["geometry"].encode()).hexdigest()
         return params["hash"]
+
+    def all_permits(self, session=None):
+        # all permits with geocoded or registered location within 1km of the facility
+        # get session from context
+        if not session:
+            session = sa.orm.object_session(self)
+        if not session:
+            raise ValueError("Session must be provided for unbound object")
+        query = sa.select(Permit).where(
+            sa.or_(
+                Permit.registered_location_parcel.has(
+                    Parcel.geometry.ST_DWithin(self.geometry, 1000)
+                ),
+                Permit.geocoded_address_location_parcel.has(
+                    Parcel.geometry.ST_DWithin(self.geometry, 1000)
+                ),
+            )
+        )
+        return session.execute(query).scalars().all()
 
     @property
     def animal_types(self):
