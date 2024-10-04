@@ -48,48 +48,62 @@ def create_facilities():
     session.commit()
 
 
-def join_facilities_to_permits(session=None):
+def join_facilities():
+    session = get_sqlalchemy_session()
+    join_cafo_annotations(session)
+    join_animal_type_annotations(session)
+    join_construction_annotations(session)
+    join_facility_counties(session)
+    join_permits(session)
+    session.commit()
+
+
+def join_permits(session=None):
     session = session or get_sqlalchemy_session()
 
     # Join facilities with permits based on parcels
+    GeocodedParcel = sa.orm.aliased(m.Parcel)
+    RegisteredParcel = sa.orm.aliased(m.Parcel)
+    GeocodedBuilding = sa.orm.aliased(m.Facility)
+    RegisteredBuilding = sa.orm.aliased(m.Facility)
+    GeocodedFacility = sa.orm.aliased(m.Facility)
+    RegisteredFacility = sa.orm.aliased(m.Facility)
     parcel_permit_joins = session.execute(
-        sa.select(m.Facility, m.Permit)
-        .join(m.Building, m.Facility.id == m.Building.facility_id)
+        sa.select(m.Permit)
         .join(
-            m.Parcel,
-            (m.Building.parcel_id == m.Parcel.id)
-            & (
-                (m.Permit.registered_location_parcel_id == m.Parcel.id)
-                | (m.Permit.geocoded_address_location_parcel_id == m.Parcel.id)
-            ),
+            RegisteredParcel,
+            m.Permit.registered_location_parcel_id == RegisteredParcel.id,
+        )
+        .join(
+            GeocodedParcel,
+            m.Permit.geocoded_address_location_parcel_id == GeocodedParcel.id,
+        )
+        .join(
+            RegisteredBuilding,
+            RegisteredParcel.id == RegisteredBuilding.parcel_id,
+        )
+        .join(
+            GeocodedBuilding,
+            GeocodedParcel.id == GeocodedBuilding.parcel_id,
+        )
+        .join(
+            RegisteredFacility,
+            RegisteredBuilding.facility_id == RegisteredFacility.id,
+        )
+        .join(
+            GeocodedFacility,
+            GeocodedBuilding.facility_id == GeocodedFacility.id,
         )
         .where(
-            (m.Facility.archived_at.is_(None))
-            & (m.Permit.facility_id.is_(None))
-            & (m.Permit.registered_location_parcel_id.isnot(None))
-            & (m.Permit.geocoded_address_location_parcel_id.isnot(None))
-        )
-        .group_by(m.Facility.id, m.Permit.id)
-        .having(
-            sa.func.count(
-                sa.distinct(
-                    sa.case(
-                        (m.Permit.registered_location_parcel_id == m.Parcel.id, 1),
-                        (
-                            m.Permit.geocoded_address_location_parcel_id == m.Parcel.id,
-                            2,
-                        ),
-                        else_=None,
-                    )
-                )
-            )
-            == 2
+            (m.Permit.registered_location.isnot(None))
+            & (m.Permit.geocoded_address_location.isnot(None))
+            & (RegisteredFacility.id == GeocodedFacility.id)
         )
     ).all()
 
     # Update facility_id for matched permits
-    for facility, permit in parcel_permit_joins:
-        permit.facility_id = facility.id
+    for permit in parcel_permit_joins:
+        permit.facility_id = permit.registered_location_parcel.buildings[0].facility_id
     session.add_all([permit for _, permit in parcel_permit_joins])
     session.flush()
 
@@ -127,6 +141,7 @@ def join_facilities_to_permits(session=None):
         permit.facility_id = facility.id
     # Commit the changes
     session.flush()
+    session.commit()
     # Print summary
     click.secho(
         f"Joined {len(parcel_permit_joins)} permits to facilities based on parcels",
@@ -138,16 +153,8 @@ def join_facilities_to_permits(session=None):
     )
 
 
-def join_facilities():
-    session = get_sqlalchemy_session()
-    join_cafo_annotations(session)
-    join_animal_type_annotations(session)
-    join_construction_annotations(session)
-    join_facility_counties(session)
-    session.commit()
-
-
 def join_cafo_annotations(session):
+    session.execute(sa.update(m.CafoAnnotation).values(facility_id=None))
     cafo_joins = session.execute(
         sa.select(m.Facility, m.CafoAnnotation)
         .join(
@@ -178,6 +185,7 @@ def join_cafo_annotations(session):
 
 
 def join_animal_type_annotations(session):
+    session.execute(sa.update(m.AnimalTypeAnnotation).values(facility_id=None))
     animal_type_joins = session.execute(
         sa.select(m.Facility, m.AnimalTypeAnnotation)
         .join(
@@ -211,6 +219,7 @@ def join_animal_type_annotations(session):
 
 
 def join_construction_annotations(session):
+    session.execute(sa.update(m.ConstructionAnnotation).values(facility_id=None))
     construction_joins = session.execute(
         sa.select(m.Facility, m.ConstructionAnnotation)
         .join(

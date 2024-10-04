@@ -1,5 +1,3 @@
-import datetime
-
 import geoalchemy2 as ga
 import numpy as np
 import rich.progress
@@ -235,15 +233,6 @@ def add_parcel_owner_annotation_relationships(session):
 
     session.add_all(to_create)
     session.commit()
-
-    click.confirm("Are you sure you want to archive all facilities?", abort=True)
-    session = get_sqlalchemy_session()
-    session.execute(sa.update(m.Facility).values(archived_at=datetime.datetime.now()))
-    session.flush()
-    count = session.execute(
-        sa.select(sa.func.count(m.Facility.id)).where(m.Facility.archived_at.is_(None))
-    ).scalar()
-    click.secho(f"Archived {count} facilities", fg="green")
 
 
 @relationship_type("matching_parcel")

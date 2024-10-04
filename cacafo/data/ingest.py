@@ -442,7 +442,6 @@ def cafo_annotation(session):
                     annotated_by=line["labeler"],
                     is_cafo=is_cafo,
                     is_afo=is_afo,
-                    annotated_by_cafo=line["labeler"],
                 )
             )
         session.add_all(cafo_annotations)
