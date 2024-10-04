@@ -431,21 +431,20 @@ def cafo_annotation(session):
             # but now we do
             if is_afo and "feedlot" in line["notes"].lower():
                 is_cafo = True
-            if line["is_cafo"].lower() == "true":
-                cafo_annotations.append(
-                    m.CafoAnnotation(
-                        location=shp.geometry.Point(
-                            float(line["longitude"]), float(line["latitude"])
-                        ).wkt,
-                        annotated_on=datetime.datetime.fromisoformat(
-                            line["annotated_before"]
-                        ),
-                        annotated_by=line["labeler"],
-                        is_cafo=is_cafo,
-                        is_afo=is_afo,
-                        annotated_by_cafo=line["labeler"],
-                    )
+            cafo_annotations.append(
+                m.CafoAnnotation(
+                    location=shp.geometry.Point(
+                        float(line["longitude"]), float(line["latitude"])
+                    ).wkt,
+                    annotated_on=datetime.datetime.fromisoformat(
+                        line["annotated_before"]
+                    ),
+                    annotated_by=line["labeler"],
+                    is_cafo=is_cafo,
+                    is_afo=is_afo,
+                    annotated_by_cafo=line["labeler"],
                 )
+            )
         session.add_all(cafo_annotations)
     with open(cacafo.data.source.get("construction_dating.csv")) as f:
         construction_annotations = list(csv.DictReader(f))
@@ -453,20 +452,19 @@ def cafo_annotation(session):
             construction_annotations,
             description="Ingesting CAFO annotations from construction dating",
         ):
-            if line["is_cafo"].lower() == "true":
-                cafo_annotations.append(
-                    m.CafoAnnotation(
-                        location=shp.geometry.Point(
-                            float(line["longitude"]), float(line["latitude"])
-                        ).wkt,
-                        annotated_on=datetime.datetime.strptime(
-                            line["processed_on"], "%m/%d/%Y"
-                        ),
-                        is_cafo=True,
-                        is_afo=True,
-                        annotated_by=line["annotator"],
-                    )
+            cafo_annotations.append(
+                m.CafoAnnotation(
+                    location=shp.geometry.Point(
+                        float(line["longitude"]), float(line["latitude"])
+                    ).wkt,
+                    annotated_on=datetime.datetime.strptime(
+                        line["processed_on"], "%m/%d/%Y"
+                    ),
+                    is_cafo=True,
+                    is_afo=True,
+                    annotated_by=line["annotator"],
                 )
+            )
         session.add_all(cafo_annotations)
         session.commit()
 
