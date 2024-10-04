@@ -449,7 +449,7 @@ GoogleDriveDataSource(
     "annotations.jsonl",
     "Annotations for images in cloud factory JSON format collapsed into lines",
     "DataLoop-formatted JSON, in lines format",
-    "https://drive.google.com/file/d/1QfNfk_CMO4XeKir7W-yDMYJkuentgqbX/view?usp=sharing",
+    "https://drive.google.com/file/d/1liHJFtmL9hjltvN_zoHGLd0yItR9zAsw/view?usp=sharing",
 )
 
 GoogleDriveDataSource(

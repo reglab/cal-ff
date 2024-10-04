@@ -1,22 +1,27 @@
-import json
 import os
+from typing import List
 
-import dtlpy as dl
-import numpy as np
+import rich
 import seaborn as sns
+import shapely as shp
 from tqdm import tqdm
 
-import cacafo.naip
+import naip
+from cacafo.geom import clean_building_geometry
 
 PROJECT = "RegLab_Prod"
 
 
 def dl_auth():
+    import dtlpy as dl
+
     if dl.token_expired():
         dl.login()
 
 
 def create_labeling_dataset(prefix, images):
+    import dtlpy as dl
+
     image_names = [image.name for image in images]
     already_exists = set(
         [
@@ -92,11 +97,52 @@ def create_labeling_dataset(prefix, images):
 
 
 def get_dataset(name):
+    import dtlpy as dl
+
     dl_auth()
     project = dl.projects.get(PROJECT)
     dataset = project.datasets.get(name)
     annotations = sum(dataset.annotations.list(), [])
     return [annotation.to_json() for annotation in annotations]
+
+
+def get_geometries_from_annnotation_data(
+    data: dict,
+) -> List[shp.geometry.base.BaseGeometry]:
+    if (len(data["annotations"]) == 1) and (
+        data["annotations"][0]["label"] == "Blank",
+    ):
+        return []
+    if isinstance(data["annotations"], str):
+        rich.print(f"[yellow]{data['name']} has a url annotation")
+        return []
+    geometries = []
+    for building_annotation in data["annotations"]:
+        if (
+            "coordinates" not in building_annotation
+            or building_annotation["type"] == "box"
+        ):
+            continue
+        for c in building_annotation["coordinates"]:
+            if "text" in c:
+                continue
+            pixels = [(a["x"], a["y"]) for a in c]
+            if not pixels:
+                continue
+            try:
+                image_xy_poly = clean_building_geometry(shp.Polygon(pixels))
+            except ValueError as ve:
+                if "linearring requires at least 4 coordinates" in str(ve):
+                    image_xy_poly = clean_building_geometry(
+                        shp.box(*pixels[0], *pixels[1])
+                    )
+            if isinstance(image_xy_poly, shp.geometry.Polygon):
+                geometries.append(image_xy_poly)
+            elif isinstance(image_xy_poly, shp.geometry.MultiPolygon):
+                geometries += image_xy_poly.geoms
+            else:
+                raise ValueError("Unexpected geometry type")
+    return geometries
 
 
 def main():

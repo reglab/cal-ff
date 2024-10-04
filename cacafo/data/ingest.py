@@ -10,13 +10,13 @@ import rich_click as click
 import shapely as shp
 import sqlalchemy as sa
 from rich.traceback import install
+from sqlalchemy.dialects import postgresql
 
 import cacafo.data.source
 import cacafo.db.sa_models as m
 import cacafo.owner_name_matching
 from cacafo.constants import CA_SRID, DEFAULT_SRID
 from cacafo.db.session import get_sqlalchemy_session
-from cacafo.geom import clean_building_geometry
 
 install(show_locals=True)
 
@@ -297,23 +297,45 @@ def _dig(d: t.Sequence, *keys: list[t.Any]) -> t.Any:
         return None
 
 
-@ingestor(m.ImageAnnotation)
+@ingestor(m.ImageAnnotation, depends_on=[m.Image])
 def image_annotation(session):
     with open(cacafo.data.source.get("annotations.jsonl")) as f:
+        image_name_to_id = {
+            name: id
+            for name, id in session.execute(sa.select(m.Image.name, m.Image.id)).all()
+        }
         annotations = []
         lines = [json.loads(line) for line in f.readlines() if line.strip()]
         for line in rich.progress.track(
             lines, description="Ingesting image annotations"
         ):
+            filename = _dig(line, "filename")
+            if filename is None:
+                continue
+            image = (image_name_to_id[filename.split("/")[-1].replace(".jpeg", "")],)
             annotations.append(
-                m.ImageAnnotation(
-                    data=line,
-                    annotated_at=datetime.datetime.fromisoformat(
+                {
+                    "data": line,
+                    "annotated_at": datetime.datetime.fromisoformat(
                         _dig(line, "annotations", 0, "createdAt") or line["createdAt"]
                     ),
-                )
+                    "image_id": image[0],
+                }
             )
-        session.add_all(annotations)
+            if len(annotations) > 5000:
+                session.execute(
+                    postgresql.insert(m.ImageAnnotation).on_conflict_do_nothing(
+                        index_elements=[m.ImageAnnotation.hash]
+                    ),
+                    annotations,
+                )
+                annotations = []
+        session.execute(
+            postgresql.insert(m.ImageAnnotation).on_conflict_do_nothing(
+                index_elements=[m.ImageAnnotation.hash]
+            ),
+            annotations,
+        )
 
 
 def _get_date(date: str, round_down: bool = False) -> t.Optional[datetime.datetime]:
@@ -472,69 +494,39 @@ def parcel_owner_name_annotation(session):
 
 @ingestor(m.Building, depends_on=[m.ImageAnnotation])
 def building(session):
-    annotations = session.execute(sa.select(m.ImageAnnotation)).scalars().all()
+    from cacafo.dataloop import get_geometries_from_annnotation_data
+
     buildings = []
     name_to_image = {
         image.name: image
         for image in session.execute(sa.select(m.Image)).scalars().all()
     }
+    annotations = session.execute(sa.select(m.ImageAnnotation)).scalars()
     for annotation in rich.progress.track(
         annotations, description="Ingesting buildings"
     ):
         data = annotation.data
-        if (len(data["annotations"]) == 1) and (
-            data["annotations"][0]["label"] == "Blank",
-        ):
-            continue
         image_name = data["name"].split(".")[0].strip("/")
         image = name_to_image.get(image_name)
-        if isinstance(data["annotations"], str):
-            rich.print(
-                f"[yellow]Skipping {data['name']} because it has a url annotation"
+        geometries = get_geometries_from_annnotation_data(data)
+        for geometry in geometries:
+            image_latlon_poly = image.from_xy_to_lat_lon(geometry)
+            buildings.append(
+                {
+                    "image_annotation_id": annotation.id,
+                    "excluded_at": None,
+                    "exclude_reason": None,
+                    "parcel_id": None,
+                    "image_xy_geometry": geometry.wkt,
+                    "geometry": image_latlon_poly.wkt,
+                }
             )
-            continue
-        for building_annotation in data["annotations"]:
-            try:
-                pixels = [
-                    (a["x"], a["y"]) for a in building_annotation["coordinates"][0]
-                ]
-            except (KeyError, IndexError):
-                rich.print(
-                    f"[yellow]Skipping {data['name']} because it has no coordinates"
-                )
-                continue
-            if not pixels:
-                rich.print(
-                    f"[yellow]Skipping {data['name']} because it has no coordinates"
-                )
-                continue
-            try:
-                image_xy_poly = clean_building_geometry(shp.Polygon(pixels))
-            except ValueError as ve:
-                if "linearring requires at least 4 coordinates" in str(ve):
-                    image_xy_poly = clean_building_geometry(
-                        shp.box(*pixels[0], *pixels[1])
-                    )
-            geometries = []
-            if isinstance(image_xy_poly, shp.geometry.Polygon):
-                geometries.append(image_xy_poly)
-            elif isinstance(image_xy_poly, shp.geometry.MultiPolygon):
-                geometries += image_xy_poly.geoms
-            else:
-                raise ValueError("Unexpected geometry type")
-            for geometry in geometries:
-                image_latlon_poly = image.from_xy_to_lat_lon(geometry)
-                buildings.append(
-                    m.Building(
-                        image_annotation_id=annotation.id,
-                        excluded_at=None,
-                        exclude_reason=None,
-                        parcel_id=None,
-                        image_xy_geometry=geometry.wkt,
-                        geometry=image_latlon_poly.wkt,
-                    )
-                )
-    session.add_all(buildings)
+    session.execute(
+        postgresql.insert(m.Building).on_conflict_do_nothing(
+            index_elements=[m.Building.hash]
+        ),
+        buildings,
+    )
     session.commit()
 
 

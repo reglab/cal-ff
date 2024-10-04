@@ -168,6 +168,7 @@ from cacafo.facilities import _cli as facilities_cli
 from cacafo.naip import _cli as naip_cli
 from cacafo.paper import cmd_generate
 from cacafo.reports import _cli as reports_cli
+from cacafo.vis import _cli as vis_cli
 
 cli.add_command(check_cli)
 cli.add_command(export_cli)
@@ -178,6 +179,7 @@ cli.add_command(ingest_cli)
 cli.add_command(join_cli)
 cli.add_command(facilities_cli)
 cli.add_command(building_relationships_cli)
+cli.add_command(vis_cli)
 
 if __name__ == "__main__":
     cli()
