@@ -1,13 +1,16 @@
 import datetime
 
 import geoalchemy2 as ga
+import pyproj
 import rich.progress
 import rich_click as click
 import shapely as shp
+import shapely.ops
 import sqlalchemy as sa
 
 import cacafo.db.sa_models as m
 from cacafo.cluster.buildings import building_clusters
+from cacafo.constants import CA_SRID, DEFAULT_SRID
 from cacafo.db.session import get_sqlalchemy_session
 
 
@@ -64,82 +67,119 @@ def join_permits(session=None):
     # Join facilities with permits based on parcels
     GeocodedParcel = sa.orm.aliased(m.Parcel)
     RegisteredParcel = sa.orm.aliased(m.Parcel)
-    GeocodedBuilding = sa.orm.aliased(m.Facility)
-    RegisteredBuilding = sa.orm.aliased(m.Facility)
+    GeocodedBuilding = sa.orm.aliased(m.Building)
+    RegisteredBuilding = sa.orm.aliased(m.Building)
     GeocodedFacility = sa.orm.aliased(m.Facility)
     RegisteredFacility = sa.orm.aliased(m.Facility)
-    parcel_permit_joins = session.execute(
-        sa.select(m.Permit)
-        .join(
-            RegisteredParcel,
-            m.Permit.registered_location_parcel_id == RegisteredParcel.id,
+    parcel_permit_joins = (
+        session.execute(
+            sa.select(m.Permit)
+            .join(
+                RegisteredParcel,
+                m.Permit.registered_location_parcel_id == RegisteredParcel.id,
+            )
+            .join(
+                GeocodedParcel,
+                m.Permit.geocoded_address_location_parcel_id == GeocodedParcel.id,
+            )
+            .join(
+                RegisteredBuilding,
+                RegisteredParcel.id == RegisteredBuilding.parcel_id,
+            )
+            .join(
+                GeocodedBuilding,
+                GeocodedParcel.id == GeocodedBuilding.parcel_id,
+            )
+            .join(
+                RegisteredFacility,
+                RegisteredBuilding.facility_id == RegisteredFacility.id,
+            )
+            .join(
+                GeocodedFacility,
+                GeocodedBuilding.facility_id == GeocodedFacility.id,
+            )
+            .where(
+                (m.Permit.registered_location.isnot(None))
+                & (m.Permit.geocoded_address_location.isnot(None))
+                & (RegisteredFacility.id == GeocodedFacility.id)
+            )
+            .distinct(m.Permit.id)
         )
-        .join(
-            GeocodedParcel,
-            m.Permit.geocoded_address_location_parcel_id == GeocodedParcel.id,
-        )
-        .join(
-            RegisteredBuilding,
-            RegisteredParcel.id == RegisteredBuilding.parcel_id,
-        )
-        .join(
-            GeocodedBuilding,
-            GeocodedParcel.id == GeocodedBuilding.parcel_id,
-        )
-        .join(
-            RegisteredFacility,
-            RegisteredBuilding.facility_id == RegisteredFacility.id,
-        )
-        .join(
-            GeocodedFacility,
-            GeocodedBuilding.facility_id == GeocodedFacility.id,
-        )
-        .where(
-            (m.Permit.registered_location.isnot(None))
-            & (m.Permit.geocoded_address_location.isnot(None))
-            & (RegisteredFacility.id == GeocodedFacility.id)
-        )
-    ).all()
+        .scalars()
+        .all()
+    )
 
     # Update facility_id for matched permits
     for permit in parcel_permit_joins:
         permit.facility_id = permit.registered_location_parcel.buildings[0].facility_id
-    session.add_all([permit for _, permit in parcel_permit_joins])
+    session.add_all(parcel_permit_joins)
     session.flush()
 
-    # Join remaining permits based on distance
-    distance_permit_joins = session.execute(
-        sa.select(m.Facility, m.Permit)
-        .where(
-            (m.Facility.archived_at.is_(None))
-            & (m.Permit.facility_id.is_(None))
-            & (m.Permit.registered_location.isnot(None))
-            & (m.Permit.geocoded_address_location.isnot(None))
-            & sa.func.ST_DWithin(m.Facility.geometry, m.Permit.registered_location, 200)
-            & sa.func.ST_DWithin(
-                m.Facility.geometry, m.Permit.geocoded_address_location, 200
-            )
-        )
-        .group_by(m.Facility.id, m.Permit.id)
-        .having(
-            ~sa.exists().where(
-                (m.Facility.id != m.Facility.id)
-                & (
-                    sa.func.ST_DWithin(
-                        m.Facility.geometry, m.Permit.registered_location, 200
-                    )
-                    | sa.func.ST_DWithin(
-                        m.Facility.geometry, m.Permit.geocoded_address_location, 200
-                    )
-                )
-            )
-        )
-    ).all()
+    # make a strtree of facilities
+    facilities = list(
+        session.execute(sa.select(m.Facility).where(m.Facility.archived_at.is_(None)))
+        .scalars()
+        .all()
+    )
+    permits = list(
+        session.execute(sa.select(m.Permit).where(m.Permit.facility_id.is_(None)))
+        .scalars()
+        .all()
+    )
 
-    # Update facility_id for distance-matched permits
-    for facility, permit in distance_permit_joins:
-        permit.facility_id = facility.id
-    # Commit the changes
+    to_meters = pyproj.Transformer.from_crs(DEFAULT_SRID, CA_SRID, always_xy=True)
+
+    def g2m(geom):
+        return shapely.ops.transform(to_meters.transform, geom)
+
+    facility_geoms = [
+        g2m(ga.shape.to_shape(facility.geometry)) for facility in facilities
+    ]
+    permit_geocoded_address_geoms = [
+        permit.geocoded_address_location
+        and g2m(ga.shape.to_shape(permit.geocoded_address_location))
+        for permit in permits
+    ]
+    permit_registered_location_geoms = [
+        permit.registered_location
+        and g2m(ga.shape.to_shape(permit.registered_location))
+        for permit in permits
+    ]
+
+    facility_strtree = shp.STRtree(facility_geoms)
+    # returns input indices, then tree indices
+    geocoded_address_matches = facility_strtree.query(
+        permit_geocoded_address_geoms,
+        predicate="dwithin",
+        distance=200,
+    )
+    geocoded_matches = {}
+    for permit_idx, facility_idx in zip(*geocoded_address_matches):
+        geocoded_matches[permit_idx] = geocoded_matches.get(permit_idx, set()) | {
+            facility_idx
+        }
+    registered_location_matches = facility_strtree.query(
+        permit_registered_location_geoms,
+        predicate="dwithin",
+        distance=200,
+    )
+    registered_matches = {}
+    for permit_idx, facility_idx in zip(*registered_location_matches):
+        registered_matches[permit_idx] = registered_matches.get(permit_idx, set()) | {
+            facility_idx
+        }
+
+    both_matches = {
+        k: v & geocoded_matches.get(k, set()) for k, v in registered_matches.items()
+    }
+    permits_to_update = []
+    for permit_id, matched_facilities in both_matches.items():
+        if len(matched_facilities) == 1:
+            permit = permits[permit_id]
+            facility = facilities[matched_facilities.pop()]
+            permit.facility_id = facility.id
+            permits_to_update.append(permit)
+    session.add_all(permits_to_update)
     session.flush()
     session.commit()
     # Print summary
@@ -148,7 +188,7 @@ def join_permits(session=None):
         fg="green",
     )
     click.secho(
-        f"Joined {len(distance_permit_joins)} permits to facilities based on distance",
+        f"Joined {len(permits_to_update)} permits to facilities based on distance",
         fg="green",
     )
 
@@ -181,6 +221,8 @@ def join_cafo_annotations(session):
         cafo_annotation_facilities[cafo_annotation.id] = facility
         cafo_annotation.facility_id = facility.id
 
+    session.flush()
+    session.commit()
     click.secho(f"Joined {len(cafo_joins)} CafoAnnotations to facilities", fg="green")
 
 
@@ -212,6 +254,8 @@ def join_animal_type_annotations(session):
         animal_type_annotation_facilities[animal_type_annotation.id] = facility
         animal_type_annotation.facility_id = facility.id
 
+    session.flush()
+    session.commit()
     click.secho(
         f"Joined {len(animal_type_joins)} AnimalTypeAnnotations to facilities",
         fg="green",

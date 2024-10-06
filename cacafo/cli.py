@@ -123,9 +123,11 @@ def shell():
     import geoalchemy2 as ga
     import geopandas as gpd
     import more_itertools as mit
+    import pyproj
     import rich.pretty
     import rl.utils.io
     import shapely as shp
+    import shapely.ops
     import shapely.wkt as wkt
     import sqlalchemy as sa
     from geoalchemy2 import Geometry
@@ -134,6 +136,7 @@ def shell():
     from sqlalchemy.dialects.postgresql import JSON
 
     import cacafo.db.sa_models as models
+    from cacafo.constants import CA_SRID, DEFAULT_SRID
     from cacafo.db.session import get_sqlalchemy_session as get_session
 
     def vim(string, wrap=True):
@@ -154,6 +157,7 @@ def shell():
 
     m = models
     s = get_session()
+    session = s
     start_ipython(argv=[], user_ns=locals())
 
 

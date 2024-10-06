@@ -118,6 +118,74 @@ def unmatched_construction_annotations(verbose=False):
     return len(results)
 
 
+@check(expected=0)
+def facilities_with_no_cafo_annotations(verbose=False):
+    session = get_sqlalchemy_session()
+    query = (
+        sa.select(m.Facility.id)
+        .join(
+            m.CafoAnnotation,
+            m.Facility.id == m.CafoAnnotation.facility_id,
+            isouter=True,
+        )
+        .where(m.Facility.archived_at.is_(None) & m.CafoAnnotation.id.is_(None))
+    )
+    results = list(session.execute(query).all())
+    for result in results:
+        if verbose:
+            rich.print(
+                f"[yellow]Facility {result[0]} has no matched CafoAnnotation[/yellow]"
+            )
+    return len(results)
+
+
+@check(expected=0)
+def facilities_with_no_construction_annotations(verbose=False):
+    session = get_sqlalchemy_session()
+    query = (
+        sa.select(m.Facility.id)
+        .join(
+            m.ConstructionAnnotation,
+            m.Facility.id == m.ConstructionAnnotation.facility_id,
+            isouter=True,
+        )
+        .where(m.Facility.archived_at.is_(None) & m.ConstructionAnnotation.id.is_(None))
+    )
+    results = list(session.execute(query).all())
+    for result in results:
+        if verbose:
+            rich.print(
+                f"[yellow]Facility {result[0]} has no matched ConstructionAnnotation[/yellow]"
+            )
+    return len(results)
+
+
+@check(expected=0)
+def facilities_with_no_animal_type(verbose=False):
+    session = get_sqlalchemy_session()
+    query = (
+        sa.select(m.Facility.id)
+        .join(
+            m.AnimalTypeAnnotation,
+            m.Facility.id == m.AnimalTypeAnnotation.facility_id,
+            isouter=True,
+        )
+        .join(m.Permit, m.Facility.id == m.Permit.facility_id, isouter=True)
+        .where(
+            m.Facility.archived_at.is_(None)
+            & m.AnimalTypeAnnotation.id.is_(None)
+            & m.Permit.id.is_(None)
+        )
+    )
+    results = list(session.execute(query).all())
+    for result in results:
+        if verbose:
+            rich.print(
+                f"[yellow]Facility {result[0]} has no matched AnimalTypeAnnotation[/yellow]"
+            )
+    return len(results)
+
+
 @click.command("check", help="Run data validation checks.")
 @click.option(
     "--verbose",
