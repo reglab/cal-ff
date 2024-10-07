@@ -136,8 +136,8 @@ def shell():
     from sqlalchemy.dialects.postgresql import JSON
 
     import cacafo.db.sa_models as models
-    from cacafo.constants import CA_SRID, DEFAULT_SRID
     from cacafo.db.session import get_sqlalchemy_session as get_session
+    from cacafo.transform import to_meters, to_wgs
 
     def vim(string, wrap=True):
         import os

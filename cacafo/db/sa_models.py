@@ -11,7 +11,7 @@ from geoalchemy2 import Geography, Geometry
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, declarative_base, mapped_column, relationship
 
-from cacafo.constants import DEFAULT_SRID
+from cacafo.transform import DEFAULT_SRID
 
 Base = declarative_base()
 
@@ -465,8 +465,6 @@ class Facility(Base):
         return params["hash"]
 
     def all_permits(self, session=None):
-        # all permits with geocoded or registered location within 1km of the facility
-        # get session from context
         if not session:
             session = sa.orm.object_session(self)
         if not session:
@@ -485,7 +483,7 @@ class Facility(Base):
 
     @property
     def animal_types(self):
-        return set(
+        annotated_types = set(
             [
                 annotation.animal_type
                 for annotation in self.all_animal_type_annotations
@@ -498,6 +496,14 @@ class Facility(Base):
                 )
             ]
         )
+        if annotated_types:
+            return annotated_types
+        all_cow_permits = all(
+            "COW" in permit.data.get("Program", "") for permit in self.best_permits
+        )
+        if all_cow_permits:
+            return {"cattle"}
+        return set()
 
     @property
     def is_cafo(self):
@@ -525,7 +531,11 @@ class Facility(Base):
 
     @property
     def images(self):
-        return [building.image for building in self.buildings if building.image]
+        return {
+            building.image_annotation.image
+            for building in self.buildings
+            if building.image_annotation and building.image_annotation.image
+        }
 
     @property
     def parcels(self):

@@ -8,8 +8,8 @@ import sqlalchemy as sa
 import cacafo.data.source
 import cacafo.db.sa_models as m
 import cacafo.owner_name_matching
-from cacafo.constants import CA_SRID
 from cacafo.db.session import get_sqlalchemy_session
+from cacafo.transform import CA_SRID
 
 BUILDING_RELATIONSHIP_TYPES = {}
 

@@ -6,6 +6,7 @@ from shapely import STRtree
 
 import cacafo.db.sa_models as m
 from cacafo.db.session import get_sqlalchemy_session
+from cacafo.transform import to_meters
 
 checks = {}
 
@@ -140,10 +141,11 @@ def facilities_with_no_cafo_annotations(verbose=False):
 
 
 @check(expected=0)
-def facilities_with_no_construction_annotations(verbose=False):
+def cafos_with_no_construction_annotations(verbose=False):
     session = get_sqlalchemy_session()
     query = (
-        sa.select(m.Facility.id)
+        sa.select(m.Facility)
+        .options(sa.orm.joinedload(m.Facility.all_cafo_annotations))
         .join(
             m.ConstructionAnnotation,
             m.Facility.id == m.ConstructionAnnotation.facility_id,
@@ -151,39 +153,177 @@ def facilities_with_no_construction_annotations(verbose=False):
         )
         .where(m.Facility.archived_at.is_(None) & m.ConstructionAnnotation.id.is_(None))
     )
-    results = list(session.execute(query).all())
-    for result in results:
-        if verbose:
-            rich.print(
-                f"[yellow]Facility {result[0]} has no matched ConstructionAnnotation[/yellow]"
-            )
-    return len(results)
+    results = list(session.execute(query).scalars().unique().all())
+    nca = []
+    for facility in results:
+        # if facility.is_cafo and not facility.all_construction_annotations:
+        if facility.is_cafo and not facility.all_construction_annotations:
+            if verbose:
+                rich.print(
+                    f"[yellow]Facility {facility.id} has no matched ConstructionAnnotation[/yellow]"
+                )
+            nca.append(facility)
+    return len(nca)
 
 
 @check(expected=0)
-def facilities_with_no_animal_type(verbose=False):
+def cafos_with_no_animal_type(verbose=False):
     session = get_sqlalchemy_session()
-    query = (
-        sa.select(m.Facility.id)
-        .join(
-            m.AnimalTypeAnnotation,
-            m.Facility.id == m.AnimalTypeAnnotation.facility_id,
-            isouter=True,
-        )
-        .join(m.Permit, m.Facility.id == m.Permit.facility_id, isouter=True)
-        .where(
-            m.Facility.archived_at.is_(None)
-            & m.AnimalTypeAnnotation.id.is_(None)
-            & m.Permit.id.is_(None)
-        )
-    )
-    results = list(session.execute(query).all())
-    for result in results:
-        if verbose:
-            rich.print(
-                f"[yellow]Facility {result[0]} has no matched AnimalTypeAnnotation[/yellow]"
+    facilities = (
+        session.execute(
+            sa.select(m.Facility)
+            .options(
+                sa.orm.joinedload(m.Facility.all_cafo_annotations),
             )
-    return len(results)
+            .options(
+                sa.orm.joinedload(m.Facility.all_animal_type_annotations),
+            )
+            .options(
+                sa.orm.joinedload(m.Facility.best_permits),
+            )
+            .where(m.Facility.archived_at.is_(None))
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+    for facility in facilities:
+        if facility.is_cafo and not facility.animal_types:
+            if verbose:
+                rich.print(
+                    f"[yellow]Facility {facility.id} has no AnimalTypeAnnotations[/yellow]"
+                )
+    return len([f for f in facilities if not f.animal_types])
+
+
+@check(expected=0)
+def facilities_that_are_cafos(verbose=False):
+    session = get_sqlalchemy_session()
+    facilities = (
+        session.execute(
+            sa.select(m.Facility)
+            .options(
+                sa.orm.joinedload(m.Facility.best_permits),
+            )
+            .options(
+                sa.orm.joinedload(m.Facility.all_cafo_annotations),
+            )
+            .where(m.Facility.archived_at.is_(None))
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+    cafos = [f for f in facilities if f.is_cafo]
+    return len(cafos)
+
+
+@check(expected=0)
+def permits_with_no_close_facility(verbose=False):
+    session = get_sqlalchemy_session()
+    # get permits more than 1km from any cafo
+    permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
+
+    facilities = (
+        session.execute(
+            sa.select(m.Facility)
+            .options(
+                sa.orm.joinedload(m.Facility.best_permits),
+            )
+            .options(
+                sa.orm.joinedload(m.Facility.all_cafo_annotations),
+            )
+            .where(m.Facility.archived_at.is_(None))
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+
+    facilities_tree = STRtree(
+        [to_meters(ga.shape.to_shape(f.geometry)) for f in facilities]
+    )
+    # get permits more than 1km from any cafo
+    permits_with_no_close_facility = []
+    for permit in permits:
+        if permit.facility_id:
+            continue
+        registered = permit.registered_location and to_meters(
+            ga.shape.to_shape(permit.registered_location)
+        )
+        geocoded = permit.geocoded_address_location and to_meters(
+            ga.shape.to_shape(permit.geocoded_address_location)
+        )
+        registered_close_facilities = facilities_tree.query(
+            registered, predicate="dwithin", distance=1000
+        )
+        geocoded_close_facilities = facilities_tree.query(
+            geocoded, predicate="dwithin", distance=1000
+        )
+        if not len(registered_close_facilities) and not len(geocoded_close_facilities):
+            permits_with_no_close_facility.append(permit)
+            if verbose:
+                rich.print(
+                    f"[yellow]Permit {permit.id} (WDID: {permit.data['WDID']}) with animal count {permit.data['Cafo Population']} and termination date {permit.data['Termination Date']} is more than 1km from any facility[/yellow]"
+                )
+    return len(permits_with_no_close_facility)
+
+
+@check(expected=0)
+def large_active_permits_with_no_close_facility(verbose=False):
+    session = get_sqlalchemy_session()
+    # get permits more than 1km from any cafo
+    permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
+
+    facilities = (
+        session.execute(
+            sa.select(m.Facility)
+            .options(
+                sa.orm.joinedload(m.Facility.best_permits),
+            )
+            .options(
+                sa.orm.joinedload(m.Facility.all_cafo_annotations),
+            )
+            .where(m.Facility.archived_at.is_(None))
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+
+    facilities_tree = STRtree(
+        [to_meters(ga.shape.to_shape(f.geometry)) for f in facilities]
+    )
+    # get permits more than 1km from any cafo
+    permits_with_no_close_facility = []
+    for permit in permits:
+        if permit.facility_id:
+            continue
+        registered = permit.registered_location and to_meters(
+            ga.shape.to_shape(permit.registered_location)
+        )
+        geocoded = permit.geocoded_address_location and to_meters(
+            ga.shape.to_shape(permit.geocoded_address_location)
+        )
+        registered_close_facilities = facilities_tree.query(
+            registered, predicate="dwithin", distance=1000
+        )
+        geocoded_close_facilities = facilities_tree.query(
+            geocoded, predicate="dwithin", distance=1000
+        )
+        if (
+            not len(registered_close_facilities)
+            and not len(geocoded_close_facilities)
+            and permit.data["Cafo Population"]
+            and float(permit.data["Cafo Population"]) > 200
+            and not permit.data["Termination Date"]
+        ):
+            permits_with_no_close_facility.append(permit)
+            if verbose:
+                rich.print(
+                    f"[yellow]Permit {permit.id} (WDID: {permit.data['WDID']}) with animal count {permit.data['Cafo Population']} and termination date {permit.data['Termination Date']} is more than 1km from any facility[/yellow]"
+                )
+    return len(permits_with_no_close_facility)
 
 
 @click.command("check", help="Run data validation checks.")

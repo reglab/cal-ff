@@ -1,7 +1,6 @@
 import datetime
 
 import geoalchemy2 as ga
-import pyproj
 import rich.progress
 import rich_click as click
 import shapely as shp
@@ -10,8 +9,8 @@ import sqlalchemy as sa
 
 import cacafo.db.sa_models as m
 from cacafo.cluster.buildings import building_clusters
-from cacafo.constants import CA_SRID, DEFAULT_SRID
 from cacafo.db.session import get_sqlalchemy_session
+from cacafo.transform import to_meters
 
 
 def create_facilities():
@@ -127,22 +126,17 @@ def join_permits(session=None):
         .all()
     )
 
-    to_meters = pyproj.Transformer.from_crs(DEFAULT_SRID, CA_SRID, always_xy=True)
-
-    def g2m(geom):
-        return shapely.ops.transform(to_meters.transform, geom)
-
     facility_geoms = [
-        g2m(ga.shape.to_shape(facility.geometry)) for facility in facilities
+        to_meters(ga.shape.to_shape(facility.geometry)) for facility in facilities
     ]
     permit_geocoded_address_geoms = [
         permit.geocoded_address_location
-        and g2m(ga.shape.to_shape(permit.geocoded_address_location))
+        and to_meters(ga.shape.to_shape(permit.geocoded_address_location))
         for permit in permits
     ]
     permit_registered_location_geoms = [
         permit.registered_location
-        and g2m(ga.shape.to_shape(permit.registered_location))
+        and to_meters(ga.shape.to_shape(permit.registered_location))
         for permit in permits
     ]
 
@@ -193,107 +187,83 @@ def join_permits(session=None):
     )
 
 
-def join_cafo_annotations(session):
-    session.execute(sa.update(m.CafoAnnotation).values(facility_id=None))
-    cafo_joins = session.execute(
-        sa.select(m.Facility, m.CafoAnnotation)
-        .join(
-            m.CafoAnnotation,
-            sa.cast(m.Facility.geometry, ga.Geometry)
-            .ST_Envelope()
-            .ST_Contains(sa.cast(m.CafoAnnotation.location, ga.Geometry)),
+def join_annotations(session, annotation_model, location_column="location"):
+    session.execute(sa.update(annotation_model).values(facility_id=None))
+    annotations = (
+        session.execute(
+            sa.select(annotation_model).where(annotation_model.facility_id.is_(None))
         )
-        .where(m.Facility.archived_at.is_(None))
-    ).all()
+        .scalars()
+        .all()
+    )
+    facilities = (
+        session.execute(sa.select(m.Facility).where(m.Facility.archived_at.is_(None)))
+        .scalars()
+        .all()
+    )
 
-    cafo_annotation_facilities = {}
-    for facility, cafo_annotation in rich.progress.track(
-        cafo_joins, description="Processing CafoAnnotations"
-    ):
-        if (
-            cafo_annotation.id in cafo_annotation_facilities
-            and ga.shape.to_shape(facility.geometry).area
-            > ga.shape.to_shape(
-                cafo_annotation_facilities[cafo_annotation.id].geometry
-            ).area
-        ):
-            continue
-        cafo_annotation_facilities[cafo_annotation.id] = facility
-        cafo_annotation.facility_id = facility.id
+    facility_geoms = [
+        to_meters(ga.shape.to_shape(facility.geometry)) for facility in facilities
+    ]
+    annotation_geoms = [
+        to_meters(ga.shape.to_shape(getattr(annotation, location_column)))
+        for annotation in annotations
+    ]
 
-    session.flush()
+    facility_strtree = shp.STRtree(facility_geoms)
+    annotation_idxs, facility_idxs = facility_strtree.query(
+        annotation_geoms, predicate="intersects"
+    )
+    for annotation_idx, facility_idx in zip(annotation_idxs, facility_idxs):
+        annotation = annotations[annotation_idx]
+        facility = facilities[facility_idx]
+        annotation.facility_id = facility.id
+    to_update = [
+        annotation for annotation in annotations if annotation.facility_id is not None
+    ]
+    annotations = [
+        annotation for annotation in annotations if annotation.facility_id is None
+    ]
+    annotation_geoms = [
+        to_meters(ga.shape.to_shape(getattr(annotation, location_column)))
+        for annotation in annotations
+    ]
+    click.secho(
+        f"Joined {len(annotations)} {annotation_model.__name__} to facilities by building match",
+        fg="green",
+    )
+
+    # go by nearest centroid
+    facility_geoms = [geom.centroid for geom in facility_geoms]
+    facility_idxs = facility_strtree.nearest(annotation_geoms)
+    matched_facilities = [facilities[idx] for idx in facility_idxs]
+    for facility, annotation in zip(matched_facilities, annotations):
+        fg = to_meters(ga.shape.to_shape(facility.geometry)).centroid
+        ag = to_meters(ga.shape.to_shape(getattr(annotation, location_column)))
+        if fg.distance(ag) < 1000 and not annotation.facility_id:
+            annotation.facility_id = facility.id
+    distance_update = [
+        annotation for annotation in annotations if annotation.facility_id is not None
+    ]
+    click.secho(
+        f"Joined {len(distance_update)} {annotation_model.__name__} to facilities by nearest centroid",
+        fg="green",
+    )
+    to_update.extend(distance_update)
+    session.add_all(to_update)
     session.commit()
-    click.secho(f"Joined {len(cafo_joins)} CafoAnnotations to facilities", fg="green")
+
+
+def join_cafo_annotations(session):
+    join_annotations(session, m.CafoAnnotation)
 
 
 def join_animal_type_annotations(session):
-    session.execute(sa.update(m.AnimalTypeAnnotation).values(facility_id=None))
-    animal_type_joins = session.execute(
-        sa.select(m.Facility, m.AnimalTypeAnnotation)
-        .join(
-            m.AnimalTypeAnnotation,
-            sa.cast(m.Facility.geometry, ga.Geometry)
-            .ST_Envelope()
-            .ST_Contains(sa.cast(m.AnimalTypeAnnotation.location, ga.Geometry)),
-        )
-        .where(m.Facility.archived_at.is_(None))
-    ).all()
-
-    animal_type_annotation_facilities = {}
-    for facility, animal_type_annotation in rich.progress.track(
-        animal_type_joins, description="Processing AnimalTypeAnnotations"
-    ):
-        if (
-            animal_type_annotation.id in animal_type_annotation_facilities
-            and ga.shape.to_shape(facility.geometry).area
-            > ga.shape.to_shape(
-                animal_type_annotation_facilities[animal_type_annotation.id].geometry
-            ).area
-        ):
-            continue
-        animal_type_annotation_facilities[animal_type_annotation.id] = facility
-        animal_type_annotation.facility_id = facility.id
-
-    session.flush()
-    session.commit()
-    click.secho(
-        f"Joined {len(animal_type_joins)} AnimalTypeAnnotations to facilities",
-        fg="green",
-    )
+    join_annotations(session, m.AnimalTypeAnnotation)
 
 
 def join_construction_annotations(session):
-    session.execute(sa.update(m.ConstructionAnnotation).values(facility_id=None))
-    construction_joins = session.execute(
-        sa.select(m.Facility, m.ConstructionAnnotation)
-        .join(
-            m.ConstructionAnnotation,
-            sa.cast(m.Facility.geometry, ga.Geometry)
-            .ST_Envelope()
-            .ST_Contains(sa.cast(m.ConstructionAnnotation.location, ga.Geometry)),
-        )
-        .where(m.Facility.archived_at.is_(None))
-    ).all()
-
-    construction_annotation_facilities = {}
-    for facility, construction_annotation in rich.progress.track(
-        construction_joins, description="Processing ConstructionAnnotations"
-    ):
-        if (
-            construction_annotation.id in construction_annotation_facilities
-            and ga.shape.to_shape(facility.geometry).area
-            > ga.shape.to_shape(
-                construction_annotation_facilities[construction_annotation.id].geometry
-            ).area
-        ):
-            continue
-        construction_annotation_facilities[construction_annotation.id] = facility
-        construction_annotation.facility_id = facility.id
-
-    click.secho(
-        f"Joined {len(construction_joins)} ConstructionAnnotations to facilities",
-        fg="green",
-    )
+    join_annotations(session, m.ConstructionAnnotation)
 
 
 def join_facility_counties(session):

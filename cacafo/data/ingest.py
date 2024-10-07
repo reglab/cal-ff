@@ -4,7 +4,6 @@ import json
 import typing as t
 from dataclasses import dataclass
 
-import pyproj
 import rich.progress
 import rich_click as click
 import shapely as shp
@@ -15,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 import cacafo.data.source
 import cacafo.db.sa_models as m
 import cacafo.owner_name_matching
-from cacafo.constants import CA_SRID, DEFAULT_SRID
+import cacafo.transform
 from cacafo.db.session import get_sqlalchemy_session
 
 install(show_locals=True)
@@ -190,8 +189,6 @@ def parcel(session):
                 parcels[(county, number)].inferred_geometry = shp.geometry.Point(
                     float(lon), float(lat)
                 )
-    to_meters = pyproj.Transformer.from_crs(DEFAULT_SRID, CA_SRID, always_xy=True)
-    to_latlon = pyproj.Transformer.from_crs(CA_SRID, DEFAULT_SRID, always_xy=True)
     for parcel in rich.progress.track(
         parcels.values(), description="Processing geometries"
     ):
@@ -199,12 +196,10 @@ def parcel(session):
             continue
         # transform to meters, buffer, hull, transform back to latlon
         original_geometry = parcel.inferred_geometry
-        points_in_meters = shp.ops.transform(
-            to_meters.transform, parcel.inferred_geometry
-        )
+        points_in_meters = cacafo.transform.to_meters(parcel.inferred_geometry)
         buffer = points_in_meters.buffer(5)
         convex_hull = buffer.convex_hull
-        parcel.inferred_geometry = shp.ops.transform(to_latlon.transform, convex_hull)
+        parcel.inferred_geometry = cacafo.transform.to_latlon(convex_hull)
 
         assert shp.geometry.shape(parcel.inferred_geometry).is_valid
         assert shp.geometry.shape(parcel.inferred_geometry).contains(original_geometry)
@@ -451,6 +446,8 @@ def cafo_annotation(session):
             construction_annotations,
             description="Ingesting CAFO annotations from construction dating",
         ):
+            if not line["latitude"] or not line["longitude"]:
+                continue
             cafo_annotations.append(
                 m.CafoAnnotation(
                     location=shp.geometry.Point(

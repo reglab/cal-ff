@@ -9,11 +9,11 @@ from PIL import Image
 from shapely.geometry import Point
 from sqlalchemy.orm import Session
 
-from cacafo.constants import DEFAULT_SRID
 from cacafo.dataloop import get_geometries_from_annnotation_data
 from cacafo.db.sa_models import Image as DBImage
 from cacafo.db.sa_models import ImageAnnotation
 from cacafo.naip import Format, download_ca_cafo_naip_image
+from cacafo.transform import DEFAULT_SRID
 
 
 def visualize_annotations(image: DBImage, annotations: List[ImageAnnotation], ax=None):
