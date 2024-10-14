@@ -152,7 +152,9 @@ class Image(Base):
             return "removed"
         if not self.annotations:
             return "unlabeled"
-        return "labeled"
+        if self.bucket not in ["0", "1"]:
+            return "initially labeled"
+        # TODO adjacent and sampled
 
     @property
     def stratum(self):
@@ -540,3 +542,22 @@ class Facility(Base):
     @property
     def parcels(self):
         return [building.parcel for building in self.buildings if building.parcel]
+
+
+class UrbanMask(Base):
+    __tablename__ = "urban_mask"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uace: Mapped[int] = mapped_column(sa.Integer)
+    geoid: Mapped[str] = mapped_column(sa.String)
+    name: Mapped[str] = mapped_column(sa.String)
+    namelsad: Mapped[str] = mapped_column(sa.String)
+    lsad: Mapped[str] = mapped_column(sa.String)
+    mtfcc: Mapped[str] = mapped_column(sa.String)
+    uatyp: Mapped[str] = mapped_column(sa.String)
+    funcstat: Mapped[str] = mapped_column(sa.String)
+    aland: Mapped[int] = mapped_column(sa.BigInteger)
+    awater: Mapped[int] = mapped_column(sa.BigInteger)
+    intptlat: Mapped[str] = mapped_column(sa.String)
+    intptlon: Mapped[str] = mapped_column(sa.String)
+    geometry: Mapped[Geometry] = mapped_column(Geometry("GEOMETRY", srid=DEFAULT_SRID))

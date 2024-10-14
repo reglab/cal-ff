@@ -4,11 +4,14 @@ import json
 import typing as t
 from dataclasses import dataclass
 
+import geoalchemy2 as ga
+import geopandas as gpd
 import rich.progress
 import rich_click as click
 import shapely as shp
 import sqlalchemy as sa
 from rich.traceback import install
+from rl.utils.io import get_data_path
 from sqlalchemy.dialects import postgresql
 
 import cacafo.data.source
@@ -521,6 +524,26 @@ def building(session):
         ),
         buildings,
     )
+    session.commit()
+
+
+@ingestor(m.UrbanMask)
+def urban_mask(session):
+    df = gpd.read_file(get_data_path("source/census_urban_mask_2019"))
+    df.crs = "EPSG:4326"
+    for _, row in rich.progress.track(
+        df.iterrows(), description="Ingesting urban mask"
+    ):
+        if ", CA" not in row["NAME10"]:
+            continue
+        session.add(
+            m.UrbanMask(
+                **(
+                    {k.lower().strip("10"): row[k] for k in row.keys()}
+                    | {"geometry": ga.WKTElement(row["geometry"].wkt, srid=4326)}
+                )
+            )
+        )
     session.commit()
 
 
