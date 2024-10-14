@@ -273,6 +273,39 @@ def construction_dating_sheet(session: Session, output_path: str):
     return places_to_annotate
 
 
+@exporter("cafo_annotations", "csv")
+def cafo_annotations_csv(session: Session, output_path: str):
+    rows = session.execute(
+        sa.select(
+            m.CafoAnnotation.id.label("cafo_annotation_id"),
+            m.CafoAnnotation.facility_id,
+            m.CafoAnnotation.is_cafo,
+            m.CafoAnnotation.is_afo,
+            m.CafoAnnotation.annotated_on,
+            m.CafoAnnotation.annotated_by,
+            sa.cast(
+                m.CafoAnnotation.location,
+                ga.Geometry,
+            )
+            .ST_X()
+            .label("longitude"),
+            sa.cast(
+                m.CafoAnnotation.location,
+                ga.Geometry,
+            )
+            .ST_Y()
+            .label("latitude"),
+        )
+    ).all()
+    rows = [row._asdict() for row in rows]
+
+    with open(output_path, "w", newline="") as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=rows[0].keys())
+        writer.writeheader()
+        writer.writerows(rows)
+    return rows
+
+
 @click.command("export", help="Export data")
 @click.option(
     "--output-path",
