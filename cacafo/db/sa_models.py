@@ -154,7 +154,7 @@ class Image(Base):
             return "unlabeled"
         if self.bucket not in ["0", "1"]:
             return "initially labeled"
-        # TODO adjacent and sampled
+        return "labeled"
 
     @property
     def stratum(self):
