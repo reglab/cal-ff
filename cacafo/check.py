@@ -1,3 +1,5 @@
+import inspect
+
 import geoalchemy2 as ga
 import rich
 import rich_click as click
@@ -196,7 +198,7 @@ def cafos_with_no_animal_type(verbose=False):
     return len([f for f in facilities if not f.animal_types])
 
 
-@check(expected=0)
+@check(expected=lambda value: value > 2200 and value < 2500)
 def facilities_that_are_cafos(verbose=False):
     session = get_sqlalchemy_session()
     facilities = (
@@ -218,7 +220,7 @@ def facilities_that_are_cafos(verbose=False):
     return len(cafos)
 
 
-@check(expected=0)
+@check(expected=lambda value: value < 700 and value > 400)
 def permits_with_no_close_facility(verbose=False):
     session = get_sqlalchemy_session()
     # get permits more than 1km from any cafo
@@ -269,7 +271,7 @@ def permits_with_no_close_facility(verbose=False):
     return len(permits_with_no_close_facility)
 
 
-@check(expected=0)
+@check(expected=lambda value: value > 100)
 def large_active_permits_with_no_close_facility(verbose=False):
     session = get_sqlalchemy_session()
     # get permits more than 1km from any cafo
@@ -348,7 +350,14 @@ def _cli(verbose, check):
     for func, expected in checks_to_run.items():
         result = func(verbose)
         name = func.__name__.replace("_", " ")
-        if expected is not None and result != expected:
-            rich.print(f"[red]Failure[/red]: {name}: {result} != {expected}")
+        if isinstance(expected, int):
+            expected_int = expected
+            expected = lambda x: x == expected  # noqa E731
+            text = f"value == {expected_int}"
         else:
-            rich.print(f"[green]OK[/green] {name}: {result}")
+            text = inspect.getsource(expected)
+            text = text.split("\n")[0].split(":")[1].strip("() ")
+        if expected is not None and not expected(result):
+            rich.print(f"[[red]Failure[/red]] {name}: expected {text} but got {result}")
+        else:
+            rich.print(f"[[green]OK[/green]] {name}: {result}")
