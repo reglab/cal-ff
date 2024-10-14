@@ -328,6 +328,77 @@ def large_active_permits_with_no_close_facility(verbose=False):
     return len(permits_with_no_close_facility)
 
 
+@check(expected=0)
+def unlabeled_adjacent_images(verbose=False):
+    session = get_sqlalchemy_session()
+
+    unlabeled_images = (
+        session.execute(
+            sa.select(m.Image)
+            .join(m.ImageAnnotation, isouter=True)
+            .where((m.ImageAnnotation.id.is_(None)) & (m.Image.bucket.is_not(None)))
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+    facility_images = (
+        session.execute(
+            sa.select(m.Image)
+            .join(m.ImageAnnotation)
+            .join(m.Building)
+            .join(m.Facility)
+            .join(m.CafoAnnotation)
+            .group_by(m.Image.id)
+            .where((m.Image.bucket != "0") & (m.Image.bucket != "1"))
+            .having(
+                (sa.func.count(m.CafoAnnotation.id) == 0)
+                | (
+                    sa.func.sum(sa.cast(m.CafoAnnotation.is_cafo, sa.Integer))
+                    == sa.func.count(m.CafoAnnotation.id)
+                )
+            )
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+
+    facility_image_tree = STRtree(
+        [ga.shape.to_shape(i.geometry) for i in facility_images]
+    )
+    unlabeled_image_idxs, facility_image_idxs = facility_image_tree.query(
+        [ga.shape.to_shape(i.geometry) for i in unlabeled_images], predicate="touches"
+    )
+    facilities_with_unlabeled_adjacents = {}
+    for uii, fii in zip(unlabeled_image_idxs, facility_image_idxs):
+        unlabeled_image = unlabeled_images[uii]
+        facility_image = facility_images[fii]
+        if facility_image.id not in facilities_with_unlabeled_adjacents:
+            facilities_with_unlabeled_adjacents[facility_image.id] = set()
+        facilities_with_unlabeled_adjacents[facility_image.id].add(unlabeled_image)
+
+    facility_map = {f.id: f for f in facility_images}
+    for facility_id, unlabeled_images in facilities_with_unlabeled_adjacents.items():
+        if verbose:
+            facility_geometry = ga.shape.to_shape(facility_map[facility_id].geometry)
+            facility_location = (
+                facility_geometry.centroid.y,
+                facility_geometry.centroid.x,
+            )
+            unlabeled_locations = [
+                (
+                    ga.shape.to_shape(ui.geometry).centroid.y,
+                    ga.shape.to_shape(ui.geometry).centroid.x,
+                )
+                for ui in unlabeled_images
+            ]
+            rich.print(
+                f"[yellow]Facility {facility_id} {facility_location} has unlabeled adjacent images at: {unlabeled_locations}[/yellow]"
+            )
+    return len(facilities_with_unlabeled_adjacents)
+
+
 @click.command("check", help="Run data validation checks.")
 @click.option(
     "--verbose",
