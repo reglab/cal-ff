@@ -12,10 +12,119 @@ from cacafo.transform import to_meters
 
 checks = {}
 
+tbd_images = [
+    "Amador_5_8192_27648",
+    "Del Norte_0_28672_8192",
+    "Fresno_1_32768_26624",
+    "Fresno_3_13312_23552",
+    "Fresno_3_28672_23552",
+    "Fresno_9_0_28672",
+    "Fresno_9_7168_27648",
+    "Fresno_9_7168_29696",
+    "Fresno_9_23552_34816",
+    "Fresno_19_23552_10240",
+    "Fresno_19_26624_13312",
+    "Fresno_22_33792_17408",
+    "Fresno_32_3072_21504",
+    "Fresno_32_20480_23552",
+    "Fresno_32_22528_24576",
+    "Fresno_32_25600_31744",
+    "Fresno_34_1024_12288",
+    "Fresno_34_2048_18432",
+    "Fresno_34_4096_4096",
+    "Fresno_34_6144_8192",
+    "Fresno_34_8192_12288",
+    "Fresno_34_14336_10240",
+    "Fresno_34_23552_7168",
+    "Glenn_3_16384_26624",
+    "Humboldt_9_34816_23552",
+    "Imperial_1_0_27648",
+    "Imperial_1_3072_12288",
+    "Imperial_7_26624_2048",
+    "Kern_1_9216_30720",
+    "Kern_1_18432_19456",
+    "Kern_2_7168_31744",
+    "Kern_8_16384_3072",
+    "Kern_22_8192_11264",
+    "Kings_6_18432_5120",
+    "Kings_6_18432_17408",
+    "Kings_6_19456_33792",
+    "Kings_6_30720_29696",
+    "Kings_7_7168_6144",
+    "Kings_7_7168_14336",
+    "Kings_7_8192_31744",
+    "Kings_7_13312_9216",
+    "Madera_1_8192_2048",
+    "Madera_1_15360_10240",
+    "Madera_6_10240_5120",
+    "Madera_6_30720_24576",
+    "Madera_8_24576_1024",
+    "Madera_12_33792_6144",
+    "Marin_2_22528_19456",
+    "Marin_2_25600_16384",
+    "Marin_2_29696_5120",
+    "Mendocino_7_32768_23552",
+    "Merced_0_5120_32768",
+    "Merced_0_14336_12288",
+    "Merced_1_4096_6144",
+    "Merced_1_11264_10240",
+    "Merced_4_0_21504",
+    "Merced_4_1024_27648",
+    "Merced_4_24576_0",
+    "Merced_4_28672_0",
+    "Merced_8_14336_36864",
+    "Merced_10_32768_32768",
+    "Sacramento_3_15360_4096",
+    "Sacramento_3_23552_2048",
+    "Sacramento_3_25600_1024",
+    "Sacramento_7_1024_9216",
+    "Diego_8_33792_19456",
+    "San Joaquin_0_12288_21504",
+    "San Joaquin_2_1024_25600",
+    "San Joaquin_2_26624_3072",
+    "San Joaquin_4_17408_19456",
+    "San Joaquin_4_24576_18432",
+    "San Joaquin_4_36864_26624",
+    "Santa Barbara_1_18432_24576",
+    "Santa Clara_0_6144_9216",
+    "Siskiyou_19_14336_17408",
+    "Sonoma_6_24576_21504",
+    "Sonoma_7_5120_19456",
+    "Sonoma_7_8192_20480",
+    "Sonoma_7_12288_20480",
+    "Sonoma_7_17408_26624",
+    "Sonoma_7_22528_16384",
+    "Sonoma_7_35840_23552",
+    "Stanislaus_1_0_23552",
+    "Stanislaus_1_5120_29696",
+    "Stanislaus_1_9216_1024",
+    "Stanislaus_5_27648_22528",
+    "Stanislaus_7_32768_26624",
+    "Stanislaus_9_3072_0",
+    "Stanislaus_11_0_16384",
+    "Sutter_0_5120_3072",
+    "Tulare_0_6144_14336",
+    "Tulare_0_11264_20480",
+    "Tulare_0_15360_32768",
+    "Tulare_0_17408_7168",
+    "Tulare_0_21504_35840",
+    "Tulare_0_29696_12288",
+    "Tulare_0_32768_35840",
+    "Tulare_6_3072_20480",
+    "Tulare_7_13312_31744",
+    "Tulare_11_20480_28672",
+    "Tulare_11_20480_30720",
+    "Tulare_12_16384_6144",
+    "Tulare_12_19456_3072",
+    "Tulare_12_19456_9216",
+    "Tulare_12_36864_0",
+]
+
 
 def check(expected=None):
     def wrapper(func):
         checks[func] = expected
+        return func
 
     return wrapper
 
@@ -336,7 +445,11 @@ def unlabeled_adjacent_images(verbose=False):
         session.execute(
             sa.select(m.Image)
             .join(m.ImageAnnotation, isouter=True)
-            .where((m.ImageAnnotation.id.is_(None)) & (m.Image.bucket.is_not(None)))
+            .where(
+                (m.ImageAnnotation.id.is_(None))
+                & (m.Image.bucket.is_not(None))
+                & (m.Image.name.notin_(tbd_images))
+            )
         )
         .unique()
         .scalars()
@@ -363,6 +476,37 @@ def unlabeled_adjacent_images(verbose=False):
         .scalars()
         .all()
     )
+    labeled_images = (
+        session.execute(
+            sa.select(m.Image)
+            .join(m.ImageAnnotation, isouter=True)
+            .where(m.ImageAnnotation.id.isnot(None))
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+
+    labeled_image_tree = STRtree(
+        [ga.shape.to_shape(i.geometry) for i in labeled_images]
+    )
+    _unlabeled_images = []
+    for ui in unlabeled_images:
+        intersections = labeled_image_tree.query(
+            ga.shape.to_shape(ui.geometry), predicate="intersects"
+        )
+        if not len(intersections):
+            _unlabeled_images.append(ui)
+            continue
+        intersection_areas = [
+            ga.shape.to_shape(ui.geometry)
+            .intersection(ga.shape.to_shape(labeled_images[i].geometry))
+            .area
+            for i in intersections
+        ]
+        if all([ia == 0 for ia in intersection_areas]):
+            _unlabeled_images.append(ui)
+    unlabeled_images = _unlabeled_images
 
     facility_image_tree = STRtree(
         [ga.shape.to_shape(i.geometry) for i in facility_images]
@@ -396,6 +540,7 @@ def unlabeled_adjacent_images(verbose=False):
             rich.print(
                 f"[yellow]Facility {facility_id} {facility_location} has unlabeled adjacent images at: {unlabeled_locations}[/yellow]"
             )
+    # return sum([list(v) for v in facilities_with_unlabeled_adjacents.values()], [])
     return len(facilities_with_unlabeled_adjacents)
 
 
