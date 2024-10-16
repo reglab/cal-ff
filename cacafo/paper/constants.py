@@ -73,8 +73,6 @@ def facilities_with_no_close_permit(verbose=False):
     all_facility_ids = set(f.id for f in facilities)
     matched_facility_ids = set()
     for permit in permits:
-        if permit.facility_id:
-            continue
         registered = permit.registered_location and to_meters(
             ga.shape.to_shape(permit.registered_location)
         )
@@ -92,7 +90,6 @@ def facilities_with_no_close_permit(verbose=False):
         for g in geocoded_close_facilities:
             matched_facility_ids.add(facilities[g].id)
     unmatched_facility_ids = all_facility_ids - matched_facility_ids
-    print(f"Unmatched facility ids: {unmatched_facility_ids}")
     no_close_matches = len(unmatched_facility_ids)
     return "{:,}".format(no_close_matches)
 
@@ -108,8 +105,6 @@ def facilities_with_no_close_registered_permit(verbose=False):
     )
     matched_facility_ids = set()
     for permit in permits:
-        if permit.facility_id:
-            continue
         registered = permit.registered_location and to_meters(
             ga.shape.to_shape(permit.registered_location)
         )
