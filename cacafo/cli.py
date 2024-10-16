@@ -213,7 +213,7 @@ def whereis(table_name, id, column):
             geometry = getattr(obj, loc)
             geometry = to_shape(geometry)
             lat, lon = geometry.centroid.y, geometry.centroid.x
-            rich.print(f"{lat}, {lon}")
+            rich.print(f"{table_name} {obj.id} @ {lat}, {lon}")
             return
     raise ValueError(f"Identified {table_name} with id {id}, but no location found")
 
