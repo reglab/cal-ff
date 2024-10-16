@@ -164,7 +164,12 @@ def shell():
 @cli.command()
 @click.argument("table_name")
 @click.argument("id", type=int, required=False, default=None)
-@click.option("--column", type=(str, str), help="Column name and value to filter by")
+@click.option(
+    "--column",
+    type=(str, str),
+    help="Column name and value to filter by",
+    multiple=True,
+)
 def whereis(table_name, id, column):
     import rich
     from geoalchemy2.shape import to_shape
@@ -185,6 +190,8 @@ def whereis(table_name, id, column):
         for column, value in columns:
             if hasattr(model, column):
                 stmt = stmt.where(getattr(model, column) == value)
+            else:
+                raise ValueError(f"Column {column} not found on model {model}")
     else:
         rich.print("[yellow] No identifier specified, selecting arbitrary row[/yellow]")
         stmt = stmt.limit(1)
@@ -195,10 +202,20 @@ def whereis(table_name, id, column):
         raise ValueError("Expected exactly one result, found: {}".format(len(results)))
 
     obj = results[0]
-    geometry = obj.geometry if hasattr(obj, "geometry") else obj.location
-    geometry = to_shape(geometry)
-    lat, lon = geometry.centroid.y, geometry.centroid.x
-    print(f"{lat}, {lon}")
+    location_attrs = [
+        "geometry",
+        "location",
+        "registered_location",
+        "geocoded_address_location",
+    ]
+    for loc in location_attrs:
+        if hasattr(obj, loc) and getattr(obj, loc) is not None:
+            geometry = getattr(obj, loc)
+            geometry = to_shape(geometry)
+            lat, lon = geometry.centroid.y, geometry.centroid.x
+            rich.print(f"{lat}, {lon}")
+            return
+    raise ValueError(f"Identified {table_name} with id {id}, but no location found")
 
 
 from cacafo.building_relationships import _cli as building_relationships_cli
