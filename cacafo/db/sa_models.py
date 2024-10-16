@@ -561,3 +561,11 @@ class UrbanMask(Base):
     intptlat: Mapped[str] = mapped_column(sa.String)
     intptlon: Mapped[str] = mapped_column(sa.String)
     geometry: Mapped[Geometry] = mapped_column(Geometry("GEOMETRY", srid=DEFAULT_SRID))
+
+
+MODELS = Base.__subclasses__()
+MODEL_MAP = {model.__tablename__: model for model in MODELS}
+
+
+def get_model_by_table_name(name):
+    return MODEL_MAP[name]

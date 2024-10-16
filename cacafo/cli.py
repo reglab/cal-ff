@@ -161,6 +161,46 @@ def shell():
     start_ipython(argv=[], user_ns=locals())
 
 
+@cli.command()
+@click.argument("table_name")
+@click.argument("id", type=int, required=False, default=None)
+@click.option("--column", type=(str, str), help="Column name and value to filter by")
+def whereis(table_name, id, column):
+    import rich
+    from geoalchemy2.shape import to_shape
+    from sqlalchemy import select
+
+    from cacafo.db.sa_models import get_model_by_table_name
+    from cacafo.db.session import get_sqlalchemy_session as get_session
+
+    session = get_session()
+    model = get_model_by_table_name(table_name)
+
+    stmt = select(model)
+
+    if id is not None:
+        stmt = stmt.where(model.id == id)
+    elif column is not None:
+        columns = column
+        for column, value in columns:
+            if hasattr(model, column):
+                stmt = stmt.where(getattr(model, column) == value)
+    else:
+        rich.print("[yellow] No identifier specified, selecting arbitrary row[/yellow]")
+        stmt = stmt.limit(1)
+
+    results = session.execute(stmt).scalars().all()
+
+    if len(results) != 1:
+        raise ValueError("Expected exactly one result, found: {}".format(len(results)))
+
+    obj = results[0]
+    geometry = obj.geometry if hasattr(obj, "geometry") else obj.location
+    geometry = to_shape(geometry)
+    lat, lon = geometry.centroid.y, geometry.centroid.x
+    print(f"{lat}, {lon}")
+
+
 from cacafo.building_relationships import _cli as building_relationships_cli
 
 # ruff: noqa: E402
