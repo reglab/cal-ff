@@ -544,6 +544,62 @@ def unlabeled_adjacent_images(verbose=False):
     return len(facilities_with_unlabeled_adjacents)
 
 
+@check(expected=0)
+def unremoved_images_intersecting_with_urban_mask(verbose=False):
+    session = get_sqlalchemy_session()
+    urban_mask = session.execute(sa.select(m.UrbanMask)).scalars().all()
+    unremoved_images = (
+        session.execute(sa.select(m.Image).where(m.Image.bucket.is_not(None)))
+        .scalars()
+        .all()
+    )
+    urban_mask_geoms = [ga.shape.to_shape(um.geometry) for um in urban_mask]
+    urban_mask_tree = STRtree(urban_mask_geoms)
+    unremoved_image_geoms = [ga.shape.to_shape(ui.geometry) for ui in unremoved_images]
+    unremoved_image_ids, urban_mask_ids = urban_mask_tree.query(
+        unremoved_image_geoms, predicate="within"
+    )
+    for ui in unremoved_image_ids:
+        if verbose:
+            rich.print(
+                f"[yellow]Image {unremoved_images[ui].id} intersects with urban mask[/yellow]"
+            )
+    return len(unremoved_image_ids)
+
+
+@check(expected=0)
+def positive_images_intersecting_with_urban_mask(verbose=False):
+    session = get_sqlalchemy_session()
+    urban_mask = session.execute(sa.select(m.UrbanMask)).scalars().all()
+    positive_images = (
+        session.execute(
+            sa.select(m.Image)
+            .join(m.ImageAnnotation)
+            .join(m.Building)
+            .where(m.Image.bucket.is_not(None))
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+    urban_mask_geoms = [ga.shape.to_shape(um.geometry) for um in urban_mask]
+    urban_mask_tree = STRtree(urban_mask_geoms)
+    positive_image_geoms = [ga.shape.to_shape(ui.geometry) for ui in positive_images]
+    positive_image_ids, urban_mask_ids = urban_mask_tree.query(
+        positive_image_geoms, predicate="within"
+    )
+    for ui in positive_image_ids:
+        if verbose:
+            image_location = (
+                ga.shape.to_shape(positive_images[ui].geometry).centroid.y,
+                ga.shape.to_shape(positive_images[ui].geometry).centroid.x,
+            )
+            rich.print(
+                f"[yellow]Image {positive_images[ui].id} {image_location} intersects with urban mask[/yellow]"
+            )
+    return len(positive_image_ids)
+
+
 @click.command("check", help="Run data validation checks.")
 @click.option(
     "--verbose",
