@@ -160,6 +160,19 @@ class Image(Base):
     def stratum(self):
         return (self.model_score, self.county.county_group.name)
 
+    @property
+    def is_positive(self):
+        buildings = sum(
+            [list(ann.buildings) for ann in self.annotations if ann.buildings], []
+        )
+        if not buildings:
+            return False
+        facilities = {building.facility.id: building.facility for building in buildings}
+        for f in facilities.values():
+            if f.is_cafo:
+                return True
+        return False
+
     @classmethod
     def get_images_for_area(cls, geometry: shp.geometry.base.BaseGeometry, session):
         query = sa.select(cls).where(
@@ -185,6 +198,41 @@ class Image(Base):
             raise NotImplementedError("Only EPSG 4326 is supported")
         return transformed_geometry
 
+    def get_adjacents(self, session=None, lazy=True, options=None):
+        if not session:
+            session = sa.orm.object_session(self)
+        if lazy:
+            query = sa.select(Image).where(
+                sa.cast(Image.geometry, ga.Geometry).ST_Touches(
+                    sa.cast(self.geometry, ga.Geometry)
+                )
+                & (Image.bucket.is_not(None))
+            )
+            if options:
+                query = query.options(*options)
+            return session.execute(query).unique().scalars().all()
+        if not hasattr(Image, "_IMAGES") or (
+            options
+            and (
+                sorted([str(o) for o in getattr(Image, "_OPTIONS", [])])
+                != sorted([str(o) for o in options])
+            )
+        ):
+            query = sa.select(Image).where(Image.bucket.is_not(None))
+            if options:
+                query = query.options(*options)
+                Image._OPTIONS = options
+            Image._IMAGES = session.execute(query).scalars().unique().all()
+        if not hasattr(Image, "_TREE"):
+            Image._TREE = shp.strtree.STRtree(
+                [ga.shape.to_shape(image.geometry) for image in Image._IMAGES]
+            )
+
+        indexes = Image._TREE.query(
+            ga.shape.to_shape(self.geometry), predicate="touches"
+        )
+        return [Image._IMAGES[i] for i in indexes]
+
 
 class ImageAnnotation(Base):
     __tablename__ = "image_annotation"
@@ -200,6 +248,10 @@ class ImageAnnotation(Base):
 
     image_id: Mapped[int] = mapped_column(sa.ForeignKey("image.id"), nullable=True)
     image = relationship("Image", back_populates="annotations")
+
+    buildings: Mapped[list["Building"]] = relationship(
+        "Building", back_populates="image_annotation"
+    )
 
     @staticmethod
     def _generate_hash_on_insert(context):
