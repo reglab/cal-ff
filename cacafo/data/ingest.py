@@ -307,7 +307,7 @@ def image_annotation(session):
         for line in rich.progress.track(
             lines, description="Ingesting image annotations"
         ):
-            filename = _dig(line, "filename")
+            filename = _dig(line, "filename") or _dig(line, "name")
             if filename is None:
                 continue
             image = (image_name_to_id[filename.split("/")[-1].replace(".jpeg", "")],)
