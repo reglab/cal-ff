@@ -138,6 +138,7 @@ class Image(Base):
     name: Mapped[str]
     geometry: Mapped[Geography] = mapped_column(Geography("POLYGON", srid=DEFAULT_SRID))
     bucket: Mapped[str] = mapped_column(sa.String, nullable=True)
+    label_reason: Mapped[str] = mapped_column(sa.String, nullable=True)
 
     county_id: Mapped[int] = mapped_column(sa.ForeignKey("county.id"))
     county = relationship("County", back_populates="images")
