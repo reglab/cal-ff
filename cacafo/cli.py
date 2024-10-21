@@ -228,18 +228,14 @@ from cacafo.export import _cli as export_cli
 from cacafo.facilities import _cli as facilities_cli
 from cacafo.naip import _cli as naip_cli
 from cacafo.paper.constants import _cli as constant_cli
-from cacafo.reports import _cli as reports_cli
-from cacafo.vis import _cli as vis_cli
 
 cli.add_command(check_cli)
 cli.add_command(export_cli)
 cli.add_command(naip_cli)
-cli.add_command(reports_cli)
 cli.add_command(ingest_cli)
 cli.add_command(join_cli)
 cli.add_command(facilities_cli)
 cli.add_command(building_relationships_cli)
-cli.add_command(vis_cli)
 cli.add_command(constant_cli)
 
 if __name__ == "__main__":
