@@ -107,6 +107,27 @@ def export_parcels_geojson(session: Session, output_path: str):
     return df
 
 
+@exporter("urban_mask", "geojson")
+def export_urban_mask_geojson(session: Session, output_path: str):
+    query = sa.select(m.UrbanMask)
+    urban_masks = session.execute(query).scalars().all()
+    df = gpd.GeoDataFrame(
+        {
+            column.key: [getattr(urban_mask, column.key) for urban_mask in urban_masks]
+            for column in sa.inspect(m.UrbanMask).columns
+        }
+        | {
+            "geometry": [
+                ga.shape.to_shape(urban_mask.geometry) for urban_mask in urban_masks
+            ],
+        }
+    )
+    text = df.to_json()
+    with open(output_path, "w") as f:
+        f.write(text)
+    return df
+
+
 @exporter("construction_annotations", "csv")
 def construction_annotations_csv(session: Session, output_path: str):
     rows = session.execute(
