@@ -300,7 +300,10 @@ def _cli():
 )
 def create_building_relationships_cli(type: str):
     session = get_sqlalchemy_session()
-    BUILDING_RELATIONSHIP_TYPES[type](session)
+    if type is None:
+        add_all_relationships(session)
+    else:
+        BUILDING_RELATIONSHIP_TYPES[type](session)
     session.commit()
     num_created = session.execute(
         sa.select(sa.func.count(m.BuildingRelationship.id))
