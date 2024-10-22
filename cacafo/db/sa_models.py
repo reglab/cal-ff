@@ -170,7 +170,7 @@ class Image(Base):
             return False
         facilities = {building.facility.id: building.facility for building in buildings}
         for f in facilities.values():
-            if f.is_cafo:
+            if f.archived_at is None and f.is_cafo:
                 return True
         return False
 
