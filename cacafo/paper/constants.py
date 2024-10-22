@@ -130,6 +130,56 @@ def population_estimate(session):
     return "{:,}".format(len(cafos(session)))
 
 
+@constant_method
+def num_initially_labeled_images(session):
+    # fully labeled iamges are
+    # 1. ex ante permit images
+    # 2. images with bucket > 1
+    # 3. adjacents
+    detection_and_permit_images = (
+        session.execute(
+            sa.select(m.Image)
+            .where(
+                (
+                    m.Image.bucket.is_not(None)
+                    & (m.Image.bucket != "0")
+                    & (m.Image.bucket != "1")
+                )
+            )
+            .options(sa.orm.joinedload(m.Image.annotations))
+            .options(
+                sa.orm.joinedload(m.Image.annotations, m.ImageAnnotation.buildings)
+            )
+            .options(
+                sa.orm.joinedload(
+                    m.Image.annotations,
+                    m.ImageAnnotation.buildings,
+                    m.Building.facility,
+                )
+            )
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+
+    num_ex_ante_images = len(detection_and_permit_images)
+
+    labeled_adjacents = set()
+    for d in detection_and_permit_images:
+        if d.label_status == "initially labeled" and d.is_positive:
+            adjacents = d.get_adjacents(
+                lazy=False, options=[sa.orm.joinedload(m.Image.annotations)]
+            )
+            for a in adjacents:
+                if a.label_status == "unlabeled":
+                    raise ValueError(f"Adjacent image {a.id} is unlabeled")
+                if a.label_status == "labeled":
+                    labeled_adjacents.add(a.id)
+    initially_labeled_images = num_ex_ante_images + len(labeled_adjacents)
+    return "{:,}".format(initially_labeled_images)
+
+
 @click.command("constants")
 def _cli():
     """Write all variables to file."""
