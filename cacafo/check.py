@@ -448,9 +448,10 @@ def unlabeled_adjacent_images(verbose=False):
             .join(m.ImageAnnotation)
             .join(m.Building)
             .join(m.Facility)
-            .join(m.CafoAnnotation)
+            .join(m.CafoAnnotation, isouter=True)
             .group_by(m.Image.id)
             .where((m.Image.bucket != "0") & (m.Image.bucket != "1"))
+            .where(m.Facility.archived_at.is_(None))
             .having(
                 (sa.func.count(m.CafoAnnotation.id) == 0)
                 | (
@@ -458,6 +459,7 @@ def unlabeled_adjacent_images(verbose=False):
                     == sa.func.count(m.CafoAnnotation.id)
                 )
             )
+            .group_by(m.Image.id)
         )
         .unique()
         .scalars()
@@ -533,6 +535,18 @@ def positive_images_intersecting_with_urban_mask(verbose=False):
                 f"[yellow]Image {positive_images[ui].id} {image_location} intersects with urban mask[/yellow]"
             )
     return len(positive_image_ids)
+
+
+@check(
+    lambda relationship_types: relationship_types
+    == {"tfidf", "distance", "fuzzy", "parcel owner annotation", "matching parcel"}
+)
+def all_building_relationship_types_present(verbose=False):
+    session = get_sqlalchemy_session()
+    # select distinct reason from building_relationship
+    query = sa.select(m.BuildingRelationship.reason).distinct()
+    results = session.execute(query).scalars().all()
+    return set(results)
 
 
 @click.command("check", help="Run data validation checks.")
