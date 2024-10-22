@@ -45,7 +45,7 @@ def initially_labeled_images():
     )
 
 
-def initial_positives():
+def initial_positive_images():
     return (
         sa.select(m.Image)
         .join(m.ImageAnnotation)
@@ -67,4 +67,37 @@ def initial_positives():
             )
         )
         .group_by(m.Facility.id)
+    )
+
+
+def adjacent_images(images_query):
+    iq = images_query.subquery()
+    image_alias = sa.orm.aliased(m.Image, name="image_alias")
+    return (
+        sa.select(m.Image)
+        .join(
+            image_alias,
+            sa.and_(
+                sa.func.ST_Intersects(
+                    m.Image.geometry,
+                    image_alias.geometry,
+                ),
+            ),
+        )
+        .where(
+            sa.and_(
+                m.Image.id != image_alias.id,
+                image_alias.id.in_(sa.select(iq.c.id)),
+                m.Image.bucket.is_not(None),
+            )
+        )
+    )
+
+
+def unlabeled_adjacent_images(images_query):
+    ai = adjacent_images(images_query).subquery()
+    return (
+        sa.select(ai)
+        .join(m.ImageAnnotation, isouter=True)
+        .where(m.ImageAnnotation.id.is_(None))
     )
