@@ -49,7 +49,7 @@ def get_sqlalchemy_engine(
     Get a SQLAlchemy engine object for the Postgres database.
     kwargs are passed to get_postgres_uri.
     """
-    return sa.create_engine(get_postgres_uri(**kwargs))
+    return sa.create_engine(get_postgres_uri(**kwargs), echo=False)
 
 
 def get_sqlalchemy_session(

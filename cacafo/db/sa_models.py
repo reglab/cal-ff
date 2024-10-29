@@ -130,6 +130,13 @@ class Permit(Base):
     )
     facility = relationship("Facility", back_populates="best_permits")
 
+    @property
+    def animal_count(self):
+        ac = self.data.get("Cafo Population")
+        if ac:
+            return int(float(ac))
+        return None
+
 
 class Image(Base):
     __tablename__ = "image"
@@ -559,6 +566,25 @@ class Facility(Base):
         if all_cow_permits:
             return {"cattle"}
         return set()
+
+    @property
+    def animal_type_source(self):
+        annotated_types = set(
+            [
+                annotation.animal_type
+                for annotation in self.all_animal_type_annotations
+                if annotation.annotated_on
+                == max(
+                    [
+                        annotation.annotated_on
+                        for annotation in self.all_animal_type_annotations
+                    ]
+                )
+            ]
+        )
+        if annotated_types:
+            return "annotation"
+        return "permit"
 
     @property
     def is_cafo(self):
