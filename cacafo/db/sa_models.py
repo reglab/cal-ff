@@ -164,6 +164,22 @@ class Permit(PublicBase):
             return int(float(ac))
         return None
 
+    @property
+    def shp_geocoded_address_location(self):
+        return ga.shape.to_shape(self.geocoded_address_location)
+
+    @property
+    def shp_registered_location(self):
+        return ga.shape.to_shape(self.registered_location)
+
+    @property
+    def shp_geocoded_address_location_meters(self):
+        return to_meters(self.shp_geocoded_address_location)
+
+    @property
+    def shp_registered_location_meters(self):
+        return to_meters(self.shp_registered_location)
+
 
 class Image(PublicBase):
     __tablename__ = "image"
