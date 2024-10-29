@@ -39,13 +39,13 @@ def positive_images():
     )
 
 
-def initially_labeled_images():
+def ex_ante_labeled_images():
     return sa.select(m.Image).where(
         m.Image.bucket.is_not(None) & (m.Image.bucket != "0") & (m.Image.bucket != "1")
     )
 
 
-def initial_positive_images():
+def ex_ante_positive_images():
     return (
         sa.select(m.Image)
         .join(m.ImageAnnotation)
@@ -91,6 +91,23 @@ def adjacent_images(images_query):
                 m.Image.bucket.is_not(None),
             )
         )
+    )
+
+
+def initially_labeled_images():
+    ex_ante_labeled_images_query = ex_ante_labeled_images()
+    adjacent_images_query = adjacent_images(ex_ante_positive_images())
+    union_query = ex_ante_labeled_images_query.union(adjacent_images_query)
+    return union_query
+
+
+def initially_labeled_images_needing_labels():
+    sq = initially_labeled_images().subquery()
+    return (
+        sa.select(m.Image)
+        .join(m.ImageAnnotation, isouter=True)
+        .where(m.ImageAnnotation.id.is_(None))
+        .join(sq, sq.c.id == m.Image.id)
     )
 
 

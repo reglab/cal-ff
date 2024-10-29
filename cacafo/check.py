@@ -8,6 +8,7 @@ import sqlalchemy as sa
 from shapely import STRtree
 
 import cacafo.db.sa_models as m
+import cacafo.query
 from cacafo.db.session import get_sqlalchemy_session
 from cacafo.transform import to_meters
 
@@ -313,14 +314,7 @@ def facilities_that_are_cafos(verbose=False):
     session = get_sqlalchemy_session()
     facilities = (
         session.execute(
-            sa.select(m.Facility)
-            .options(
-                sa.orm.joinedload(m.Facility.best_permits),
-            )
-            .options(
-                sa.orm.joinedload(m.Facility.all_cafo_annotations),
-            )
-            .where(m.Facility.archived_at.is_(None))
+            cacafo.query.cafos(),
         )
         .unique()
         .scalars()
@@ -441,44 +435,14 @@ def large_active_permits_with_no_close_facility(verbose=False):
 @check(expected=0)
 def unlabeled_adjacent_images(verbose=False):
     session = get_sqlalchemy_session()
-
-    initial_facility_images = (
-        session.execute(
-            sa.select(m.Image)
-            .join(m.ImageAnnotation)
-            .join(m.Building)
-            .join(m.Facility)
-            .join(m.CafoAnnotation, isouter=True)
-            .group_by(m.Image.id)
-            .where((m.Image.bucket != "0") & (m.Image.bucket != "1"))
-            .where(m.Facility.archived_at.is_(None))
-            .having(
-                (sa.func.count(m.CafoAnnotation.id) == 0)
-                | (
-                    sa.func.sum(sa.cast(m.CafoAnnotation.is_cafo, sa.Integer))
-                    == sa.func.count(m.CafoAnnotation.id)
-                )
+    aiq = cacafo.query.unlabeled_adjacent_images(cacafo.query.ex_ante_positive_images())
+    uai = session.execute(aiq).unique().scalars().all()
+    if verbose:
+        for ui in uai:
+            rich.print(
+                f"[yellow]Image {ui} is adjacent to a positive image but is unlabeled[/yellow]"
             )
-            .group_by(m.Image.id)
-        )
-        .unique()
-        .scalars()
-        .all()
-    )
-    unlabeled_adjacents = set()
-    for image in initial_facility_images:
-        adjacents = image.get_adjacents(
-            lazy=False, options=[sa.orm.joinedload(m.Image.annotations)]
-        )
-        for a in adjacents:
-            if a.label_status == "unlabeled":
-                unlabeled_adjacents.add(a.id)
-                if verbose:
-                    location = ga.shape.to_shape(a.geometry).centroid
-                    rich.print(
-                        f"[yellow]Image {a.name} ({a.id}) at {location.y}, {location.x} is an unlabeled adjacent[/yellow]"
-                    )
-    return len(unlabeled_adjacents)
+    return len(uai)
 
 
 @check(expected=0)
