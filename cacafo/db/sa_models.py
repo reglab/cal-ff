@@ -11,7 +11,7 @@ from geoalchemy2 import Geography, Geometry
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, declarative_base, mapped_column, relationship
 
-from cacafo.transform import DEFAULT_SRID
+from cacafo.transform import DEFAULT_SRID, to_meters
 
 Base = declarative_base()
 
@@ -33,6 +33,14 @@ class PublicBase(Base):
         if not hasattr(self, "location"):
             raise AttributeError(f"Class {self.__class__} has no location attribute")
         return ga.shape.to_shape(self.location)
+
+    @property
+    def shp_geometry_meters(self):
+        return to_meters(self.shp_geometry)
+
+    @property
+    def shp_location_meters(self):
+        return to_meters(self.shp_location)
 
 
 class CountyGroup(PublicBase):
