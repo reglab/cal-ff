@@ -86,7 +86,7 @@ def create_labeling_dataset(prefix, images):
     for image in tqdm(images):
         name = f"{image.name}.jpeg"
         item = dataset.items.get("/" + name)
-        geometry = image.geometry
+        geometry = image.shp_geometry
         lat, lon = geometry.centroid.y, geometry.centroid.x
         item.metadata["user"] = {
             "latitude": lat,
