@@ -16,7 +16,26 @@ from cacafo.transform import DEFAULT_SRID
 Base = declarative_base()
 
 
-class CountyGroup(Base):
+class PublicBase(Base):
+    __abstract__ = True
+
+    def to_dict(self):
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
+    @property
+    def shp_geometry(self):
+        if not hasattr(self, "geometry"):
+            raise AttributeError(f"Class {self.__class__} has no geometry attribute")
+        return ga.shape.to_shape(self.geometry)
+
+    @property
+    def shp_location(self):
+        if not hasattr(self, "location"):
+            raise AttributeError(f"Class {self.__class__} has no location attribute")
+        return ga.shape.to_shape(self.location)
+
+
+class CountyGroup(PublicBase):
     __tablename__ = "county_group"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -27,7 +46,7 @@ class CountyGroup(Base):
     )
 
 
-class County(Base):
+class County(PublicBase):
     __tablename__ = "county"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -59,7 +78,7 @@ class County(Base):
         raise ValueError(f"No county found for point {point}")
 
 
-class Parcel(Base):
+class Parcel(PublicBase):
     __tablename__ = "parcel"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -95,7 +114,7 @@ class Parcel(Base):
     __table_args__ = (sa.UniqueConstraint("number", "county_id"),)
 
 
-class Permit(Base):
+class Permit(PublicBase):
     __tablename__ = "permit"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -138,7 +157,7 @@ class Permit(Base):
         return None
 
 
-class Image(Base):
+class Image(PublicBase):
     __tablename__ = "image"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -242,7 +261,7 @@ class Image(Base):
         return [Image._IMAGES[i] for i in indexes]
 
 
-class ImageAnnotation(Base):
+class ImageAnnotation(PublicBase):
     __tablename__ = "image_annotation"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -271,7 +290,7 @@ class ImageAnnotation(Base):
         return params["hash"]
 
 
-class CafoAnnotation(Base):
+class CafoAnnotation(PublicBase):
     __tablename__ = "cafo_annotation"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -287,7 +306,7 @@ class CafoAnnotation(Base):
     facility = relationship("Facility", back_populates="all_cafo_annotations")
 
 
-class AnimalTypeAnnotation(Base):
+class AnimalTypeAnnotation(PublicBase):
     __tablename__ = "animal_type_annotation"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -303,7 +322,7 @@ class AnimalTypeAnnotation(Base):
     facility = relationship("Facility", back_populates="all_animal_type_annotations")
 
 
-class ConstructionAnnotation(Base):
+class ConstructionAnnotation(PublicBase):
     __tablename__ = "construction_annotation"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -330,7 +349,7 @@ class ConstructionAnnotation(Base):
     facility = relationship("Facility", back_populates="all_construction_annotations")
 
 
-class ParcelOwnerNameAnnotation(Base):
+class ParcelOwnerNameAnnotation(PublicBase):
     __tablename__ = "parcel_owner_name_annotation"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -341,7 +360,7 @@ class ParcelOwnerNameAnnotation(Base):
     annotated_by: Mapped[str] = mapped_column(sa.String)
 
 
-class Building(Base):
+class Building(PublicBase):
     __tablename__ = "building"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -383,7 +402,7 @@ class Building(Base):
         return params["hash"]
 
 
-class BuildingRelationship(Base):
+class BuildingRelationship(PublicBase):
     __tablename__ = "building_relationship"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -402,7 +421,7 @@ class BuildingRelationship(Base):
         return f"{self.building_id} -> {self.related_building_id} ({self.reason}: {self.weight}))"
 
 
-class Facility(Base):
+class Facility(PublicBase):
     __tablename__ = "facility"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -623,7 +642,7 @@ class Facility(Base):
         return [building.parcel for building in self.buildings if building.parcel]
 
 
-class UrbanMask(Base):
+class UrbanMask(PublicBase):
     __tablename__ = "urban_mask"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -642,7 +661,7 @@ class UrbanMask(Base):
     geometry: Mapped[Geometry] = mapped_column(Geometry("GEOMETRY", srid=DEFAULT_SRID))
 
 
-MODELS = Base.__subclasses__()
+MODELS = PublicBase.__subclasses__()
 MODEL_MAP = {model.__tablename__: model for model in MODELS}
 
 
