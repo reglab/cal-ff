@@ -20,6 +20,7 @@ def cafos():
 
 
 def positive_images():
+    cafo_query = cafos().subquery()
     return (
         sa.select(m.Image)
         .join(m.ImageAnnotation)
@@ -27,15 +28,72 @@ def positive_images():
         .join(m.Facility)
         .join(m.CafoAnnotation, isouter=True)
         .group_by(m.Image.id)
-        .where(m.Facility.archived_at.is_(None))
-        .having(
-            (sa.func.count(m.CafoAnnotation.id) == 0)
-            | (
-                sa.func.sum(sa.cast(m.CafoAnnotation.is_cafo, sa.Integer))
-                == sa.func.count(m.CafoAnnotation.id)
+        .where(m.Facility.id.in_(sa.select(cafo_query.c.id)))
+    )
+
+
+def labeled_negative_images():
+    """
+    Images that have been labeled with bounding boxes but
+    later determined not to have a CAFO.
+    """
+    positive_image_subquery = positive_images().subquery()
+    return (
+        sa.select(m.Image)
+        .join(m.ImageAnnotation)
+        .join(m.Building)
+        .join(m.Facility)
+        .group_by(m.Image.id)
+        .where(m.Image.id.notin_(sa.select(positive_image_subquery.c.id)))
+    )
+
+
+def high_confidence_negative_images():
+    """
+    Images labeled blank with high model confidence
+    """
+    positive_image_subquery = positive_images().subquery()
+    return (
+        sa.select(m.Image)
+        .join(m.ImageAnnotation)
+        .join(m.Building, isouter=True)
+        .where(m.Image.id.notin_(sa.select(positive_image_subquery.c.id)))
+        .where(
+            sa.and_(
+                m.Image.bucket != "0",
+                m.Image.bucket != "1",
+                m.Image.bucket.is_not(None),
             )
         )
-        .group_by(m.Facility.id)
+        .group_by(m.Image.id)
+        .having(
+            sa.func.sum(sa.cast(m.Building.id.is_(None), sa.Integer))
+            == sa.func.count(m.ImageAnnotation.id)
+        )
+    )
+
+
+def low_confidence_negative_images():
+    """
+    Images labeled blank with low model confidence
+    """
+    positive_image_subquery = positive_images().subquery()
+    return (
+        sa.select(m.Image)
+        .join(m.ImageAnnotation)
+        .join(m.Building, isouter=True)
+        .where(m.Image.id.notin_(sa.select(positive_image_subquery.c.id)))
+        .where(
+            sa.or_(
+                m.Image.bucket == "0",
+                m.Image.bucket == "1",
+            )
+        )
+        .group_by(m.Image.id)
+        .having(
+            sa.func.sum(sa.cast(m.Building.id.is_(None), sa.Integer))
+            == sa.func.count(m.ImageAnnotation.id)
+        )
     )
 
 

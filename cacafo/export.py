@@ -1,6 +1,8 @@
 import csv
 import datetime
+import itertools
 import json
+import random
 
 import geoalchemy2 as ga
 import geopandas as gpd
@@ -11,6 +13,7 @@ from sqlalchemy.orm import Session
 from tqdm import tqdm
 
 import cacafo.db.sa_models as m
+import cacafo.query
 
 EXPORTERS = {}
 
@@ -325,6 +328,52 @@ def cafo_annotations_csv(session: Session, output_path: str):
         writer.writeheader()
         writer.writerows(rows)
     return rows
+
+
+@exporter("irr_batch", "csv")
+def irr_batch(session: Session, output_path: str):
+    positive_images = session.execute(cacafo.query.positive_images()).scalars().all()
+    labeled_negative_images = (
+        session.execute(cacafo.query.labeled_negative_images()).scalars().all()
+    )
+    high_confidence_negative_images = (
+        session.execute(cacafo.query.high_confidence_negative_images()).scalars().all()
+    )
+    low_confidence_negative_images = (
+        session.execute(cacafo.query.low_confidence_negative_images()).scalars().all()
+    )
+
+    # assert that the classes are mutually exclusive
+    positive_image_ids = {image.id for image in positive_images}
+    labeled_negative_image_ids = {image.id for image in labeled_negative_images}
+    high_confidence_negative_image_ids = {
+        image.id for image in high_confidence_negative_images
+    }
+    low_confidence_negative_image_ids = {
+        image.id for image in low_confidence_negative_images
+    }
+    for set_one, set_two in itertools.combinations(
+        [
+            positive_image_ids,
+            labeled_negative_image_ids,
+            high_confidence_negative_image_ids,
+            low_confidence_negative_image_ids,
+        ],
+        2,
+    ):
+        assert not set_one & set_two
+    # sample 50 random images from each class, and write their names to file
+    all_images = (
+        positive_images
+        + labeled_negative_images
+        + high_confidence_negative_images
+        + low_confidence_negative_images
+    )
+    with open(output_path, "w") as f:
+        for image_set in all_images:
+            for image in random.sample(image_set, 50):
+                f.write(f"{image.name}\n")
+    return all_images
 
 
 @click.command("export", help="Export data")

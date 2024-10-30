@@ -136,6 +136,7 @@ def shell():
     from sqlalchemy.dialects.postgresql import JSON
 
     import cacafo.db.sa_models as models
+    import cacafo.query
     from cacafo.db.session import get_sqlalchemy_session as get_session
     from cacafo.transform import to_meters, to_wgs
 
