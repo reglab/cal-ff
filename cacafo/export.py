@@ -363,17 +363,43 @@ def irr_batch(session: Session, output_path: str):
     ):
         assert not set_one & set_two
     # sample 50 random images from each class, and write their names to file
-    all_images = (
-        positive_images
-        + labeled_negative_images
-        + high_confidence_negative_images
-        + low_confidence_negative_images
+    writer = csv.DictWriter(
+        open(output_path, "w", newline=""),
+        fieldnames=["stratum", "image_name", "labeler"],
     )
-    with open(output_path, "w") as f:
-        for image_set in all_images:
-            for image in random.sample(image_set, 50):
-                f.write(f"{image.name}\n")
-    return all_images
+    labeler_names = ["daniel", "nyambe", "jackline", "james"]
+    rows = []
+    writer.writeheader()
+    for image_set, stratum in zip(
+        [
+            positive_images,
+            labeled_negative_images,
+            high_confidence_negative_images,
+            low_confidence_negative_images,
+        ],
+        [
+            "positive",
+            "labeled_negative",
+            "high_confidence_negative",
+            "low_confidence_negative",
+        ],
+    ):
+        random.shuffle(image_set)
+        sample = image_set[:400]
+        for images in zip(sample[::2], sample[1::2]):
+            labelers_one = random.sample(labeler_names, 2)
+            labelers_two = [a for a in labeler_names if a not in labelers_one]
+            for im, adj in zip(images, (labelers_one, labelers_two)):
+                for a in adj:
+                    rows.append(
+                        {
+                            "stratum": stratum,
+                            "image_name": im.name,
+                            "labeler": a,
+                        }
+                    )
+                    writer.writerow(rows[-1])
+    return rows
 
 
 @click.command("export", help="Export data")
