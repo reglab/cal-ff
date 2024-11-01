@@ -91,7 +91,7 @@ def create_labeling_dataset(prefix, images):
         item.metadata["user"] = {
             "latitude": lat,
             "longitude": lon,
-            "gmaps_link": f"https://www.google.com/maps/place/{lat},{lon}&t=k",
+            "gmaps_link": f"https://www.google.com/maps/place/{lat},{lon}",
         }
         item.update()
 
