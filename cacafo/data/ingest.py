@@ -66,13 +66,13 @@ def _preflight(session, model, overwrite=False, add=False):
 
 def ingestor(model, depends_on=[]):
     def decorator(func):
-        def wrapper(overwrite=False, add=False):
+        def wrapper(overwrite=False, add=False, file_path=None):
             session = get_sqlalchemy_session()
             _preflight(session, model, overwrite, add)
             previous_num = session.execute(
                 sa.select(sa.func.count()).select_from(model)
             ).scalar()
-            func(session)
+            func(session, file_path)
             session.commit()
             post_num = session.execute(
                 sa.select(sa.func.count()).select_from(model)
@@ -89,8 +89,9 @@ def ingestor(model, depends_on=[]):
 
 
 @ingestor(m.CountyGroup)
-def county_group(session):
-    with open(cacafo.data.source.get("county_groups.csv")) as f:
+def county_group(session, file_path=None):
+    path = file_path or cacafo.data.source.get("county_groups.csv")
+    with open(path) as f:
         reader = csv.DictReader(f)
         county_groups = []
         for line in rich.progress.track(reader, description="Ingesting county groups"):
@@ -99,7 +100,7 @@ def county_group(session):
 
 
 @ingestor(m.County, depends_on=[m.CountyGroup])
-def county(session):
+def county(session, file_path=None):
     county_group_name_to_id = {
         name: id
         for name, id in session.execute(
@@ -107,14 +108,16 @@ def county(session):
         ).all()
     }
 
-    with open(cacafo.data.source.get("county_groups.csv")) as f:
+    path = file_path or cacafo.data.source.get("county_groups.csv")
+    with open(path) as f:
         reader = csv.DictReader(f)
         county_name_to_group_id = {
             line["County"]: county_group_name_to_id[line["Group Name"]]
             for line in reader
         }
 
-    with open(cacafo.data.source.get("counties.csv")) as f:
+    counties_path = file_path or cacafo.data.source.get("counties.csv")
+    with open(counties_path) as f:
         csv.field_size_limit(1000000)
         reader = csv.DictReader(f)
         counties = []
@@ -130,7 +133,7 @@ def county(session):
 
 
 @ingestor(m.Parcel, depends_on=[m.County])
-def parcel(session):
+def parcel(session, file_path=None):
     county_name_to_id = {
         name: id
         for name, id in session.execute(sa.select(m.County.name, m.County.id)).all()
@@ -138,7 +141,8 @@ def parcel(session):
 
     parcels: dict[tuple[str, str], m.Parcel] = {}
 
-    with open(cacafo.data.source.get("parcels.csv")) as f:
+    path = file_path or cacafo.data.source.get("parcels.csv")
+    with open(path) as f:
         reader = csv.DictReader(f)
         for line in rich.progress.track(reader, description="Ingesting parcels"):
             parcel = m.Parcel(
@@ -151,7 +155,8 @@ def parcel(session):
             )
             parcels[(line["county_name"], line["numb"])] = parcel
 
-    with open(cacafo.data.source.get("parcel_locations.csv")) as f:
+    locations_path = file_path or cacafo.data.source.get("parcel_locations.csv")
+    with open(locations_path) as f:
         reader = csv.DictReader(f)
         # each line lists a county,number,lat,lon
         for line in rich.progress.track(
@@ -213,8 +218,9 @@ def parcel(session):
 
 
 @ingestor(m.Permit)
-def permit(session):
-    with open(cacafo.data.source.get("geocoded_addresses.csv")) as f:
+def permit(session, file_path=None):
+    geocoded_path = file_path or cacafo.data.source.get("geocoded_addresses.csv")
+    with open(geocoded_path) as f:
         geocoded_addresses: dict[tuple[str, str], str] = {
             (line["Address"], line["City"]): (
                 shp.geometry.Point(
@@ -223,7 +229,8 @@ def permit(session):
             )
             for line in csv.DictReader(f)
         }
-    with open(cacafo.data.source.get("permits.csv")) as f:
+    permits_path = file_path or cacafo.data.source.get("permits.csv")
+    with open(permits_path) as f:
         reader = csv.DictReader(f)
         permits = []
         for line in rich.progress.track(reader, description="Ingesting permits"):
@@ -257,8 +264,9 @@ def permit(session):
 
 
 @ingestor(m.Image)
-def image(session):
-    with open(cacafo.data.source.get("images.csv")) as f:
+def image(session, file_path=None):
+    path = file_path or cacafo.data.source.get("images.csv")
+    with open(path) as f:
         county_name_to_id = {
             name: id
             for name, id in session.execute(sa.select(m.County.name, m.County.id)).all()
@@ -296,14 +304,15 @@ def _dig(d: t.Sequence, *keys: list[t.Any]) -> t.Any:
 
 
 @ingestor(m.ImageAnnotation, depends_on=[m.Image])
-def image_annotation(session):
-    with open(cacafo.data.source.get("annotations.jsonl")) as f:
+def image_annotation(session, file_path=None):
+    path = file_path or cacafo.data.source.get("annotations.jsonl")
+    with open(path) as f:
         image_name_to_id = {
             name: id
             for name, id in session.execute(sa.select(m.Image.name, m.Image.id)).all()
         }
         annotations = []
-        lines = [json.loads(line) for line in f.readlines() if line.strip()]
+        lines = [json.loads(line.strip()) for line in f.readlines() if line.strip()]
         for line in rich.progress.track(
             lines, description="Ingesting image annotations"
         ):
@@ -345,8 +354,9 @@ def _get_date(date: str, round_down: bool = False) -> t.Optional[datetime.dateti
 
 
 @ingestor(m.ConstructionAnnotation)
-def construction_annotation(session):
-    with open(cacafo.data.source.get("construction_dating.csv")) as f:
+def construction_annotation(session, file_path=None):
+    path = file_path or cacafo.data.source.get("construction_dating.csv")
+    with open(path) as f:
         annotations = []
         lines = [line for line in csv.DictReader(f)]
         for line in rich.progress.track(
@@ -383,8 +393,9 @@ def construction_annotation(session):
 
 
 @ingestor(m.AnimalTypeAnnotation)
-def animal_type_annotation(session):
-    with open(cacafo.data.source.get("animal_typing.csv")) as f:
+def animal_type_annotation(session, file_path=None):
+    path = file_path or cacafo.data.source.get("animal_typing.csv")
+    with open(path) as f:
         reader = list(csv.DictReader(f))
         animal_types = []
         for line in rich.progress.track(reader, description="Ingesting animal types"):
@@ -469,8 +480,9 @@ def cafo_annotation(session):
 
 
 @ingestor(m.ParcelOwnerNameAnnotation)
-def parcel_owner_name_annotation(session):
-    with open(cacafo.data.source.get("parcel_name_annotations.csv")) as f:
+def parcel_owner_name_annotation(session, file_path=None):
+    path = file_path or cacafo.data.source.get("parcel_name_annotations.csv")
+    with open(path) as f:
         reader = list(csv.DictReader(f))
         annotations = []
         for line in rich.progress.track(
@@ -490,7 +502,7 @@ def parcel_owner_name_annotation(session):
 
 
 @ingestor(m.Building, depends_on=[m.ImageAnnotation])
-def building(session):
+def building(session, file_path=None):
     from cacafo.dataloop import get_geometries_from_annnotation_data
 
     buildings = []
@@ -528,8 +540,9 @@ def building(session):
 
 
 @ingestor(m.UrbanMask)
-def urban_mask(session):
-    df = gpd.read_file(get_data_path("source/census_urban_mask_2019"))
+def urban_mask(session, file_path=None):
+    path = file_path or get_data_path("source/census_urban_mask_2019")
+    df = gpd.read_file(path)
     df.crs = "EPSG:4326"
     for _, row in rich.progress.track(
         df.iterrows(), description="Ingesting urban mask"
@@ -566,12 +579,13 @@ def status():
 @click.command("ingest", help="Ingest data into the database")
 @click.option("--overwrite", is_flag=True)
 @click.option("--add", is_flag=True)
+@click.option("--file-path", help="Override default input file path", type=click.Path())
 @click.argument(
     "tablename", type=click.Choice(list(Ingestor.instances.keys()) + ["status"])
 )
-def _cli(tablename, overwrite, add):
+def _cli(tablename, overwrite, add, file_path):
     if tablename == "status":
         status()
         return
     ingestor = Ingestor.instances[tablename]
-    ingestor.func(overwrite=overwrite, add=add)
+    ingestor.func(overwrite=overwrite, add=add, file_path=file_path)
