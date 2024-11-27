@@ -8,6 +8,8 @@ import sqlalchemy as sa
 import cacafo.db.sa_models as m
 import cacafo.query
 from cacafo.db.session import get_sqlalchemy_session
+import cacafo.stats
+import cacafo.stats.population
 from cacafo.transform import to_meters
 
 CONSTANT_METHODS = []
@@ -227,6 +229,208 @@ def large_active_permits_with_no_close_facilities(session):
         if u.animal_count and u.animal_count >= 200 and not u.data["Termination Date"]
     ]
     return "{:,}".format(len(unmatched_permits))
+
+@constant_method
+def total_permits(session):
+    permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
+    return "{:,}".format(len(permits))
+
+@constant_method
+def large_permits(session):
+    permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
+
+    large_permits = [p for p in permits if (p.animal_count is not None) and p.animal_count >= 200]
+    return "{:,}".format(len(large_permits))
+
+@constant_method
+def small_permits(session):
+    permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
+
+    small_permits = [p for p in permits if (p.animal_count is not None) and p.animal_count < 200]
+    return "{:,}".format(len(small_permits))
+
+@constant_method
+def no_animal_count_permits(session):
+    permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
+
+    no_animal_count_permits = [p for p in permits if p.animal_count is None]
+    return "{:,}".format(len(no_animal_count_permits))
+
+#this doesn't work because I need to refactor the stats script for sql alchemy over peewee
+#@constant_method
+#def fac_to_im_ratio(session):
+#    return "{:,}".format(session.execute(cacafo.stats.population.number_of_images_per_facility()))
+
+# @constant_method
+# def completeness_est(session):
+#     #this is images population, not number of facilities
+#     pop_est = session.execute(cacafo.stats.population.estimate_population()).point
+#     #convert to n_facilities
+#     pop_est = pop_est / float(fac_to_im_ratio(session))
+#     observed = num_facilities()
+#     return "{:,}\%".format(observed/pop_est)
+
+# @constant_method
+# def completeness_lower(session):
+#     #this is images population, not number of facilities
+#     pop_upper = session.execute(cacafo.stats.population.estimate_population()).upper
+#     #convert to n_facilities
+#     pop_upper = pop_upper / float(fac_to_im_ratio(session))
+#     observed = num_facilities()
+#     return "{:,}\%".format(observed/pop_upper)
+
+# @constant_method
+# def FNR_est(session):
+#     survey = session.execute(cacafo.stats.population.Survey.from_db())
+#     survey_0 = cacafo.stats.population.Survey(
+#         strata=[stratum for stratum in survey.strata if "0:" in stratum.name],
+#         post_hoc_positive=0,
+#     )
+#     population_0 = cacafo.stats.population.stratum_f_estimator(survey_0)
+
+#     total_images = sum([stratum.total for stratum in survey_0.strata])
+#     FN_est = population_0.point
+#     return "{:,}".format(FN_est/total_images)
+
+# @constant_method
+# def FNR_upper(session):
+#     survey = session.execute(cacafo.stats.population.Survey.from_db())
+#     survey_0 = cacafo.stats.population.Survey(
+#         strata=[stratum for stratum in survey.strata if "0:" in stratum.name],
+#         post_hoc_positive=0,
+#     )
+#     population_0 = cacafo.stats.population.stratum_f_estimator(survey_0)
+
+#     total_images = sum([stratum.total for stratum in survey_0.strata])
+#     FN_upper = population_0.upper
+#     return "{:,}".format(FN_upper/total_images)
+
+# @constant_method
+# def unobserved_FN_upper(session):
+#     survey = session.execute(cacafo.stats.population.Survey.from_db())
+#     survey_0 = cacafo.stats.population.Survey(
+#         strata=[stratum for stratum in survey.strata if "0:" in stratum.name],
+#         post_hoc_positive=0,
+#     )
+#     population_0 = cacafo.stats.population.stratum_f_estimator(survey_0)
+#     FN_upper = population_0.upper
+#     observed_0 = sum([stratum.positive for stratum in survey_0.strata])
+
+#     return "{:,}".format(FN_upper - observed_0)
+
+# @constant_method
+# def unlabeled_negative_count(session):
+#     survey = session.execute(cacafo.stats.population.Survey.from_db())
+#     survey_0 = cacafo.stats.population.Survey(
+#         strata=[stratum for stratum in survey.strata if "0:" in stratum.name],
+#         post_hoc_positive=0,
+#     )
+#     unlabeled_images = sum([stratum.unlabeled for stratum in survey_0.strata])
+#     return "{:,}".format(unlabeled_images)
+
+# @constant_method
+# def unobserved_TP_est(session):
+#     survey = session.execute(cacafo.stats.population.Survey.from_db())
+#     survey_1 = cacafo.stats.population.Survey(
+#         strata=[stratum for stratum in survey.strata if "1:" in stratum.name],
+#         post_hoc_positive=0,
+#     )
+#     population_1 = cacafo.stats.population.stratum_f_estimator(survey_1)
+#     observed_1 = sum([stratum.positive for stratum in survey_1.strata])
+
+#     TP_est = population_1.point
+#     return "{:,}".format(TP_est - observed_1)
+
+# @constant_method
+# def unobserved_TP_upper(session):
+#     survey = session.execute(cacafo.stats.population.Survey.from_db())
+#     survey_1 = cacafo.stats.population.Survey(
+#         strata=[stratum for stratum in survey.strata if "1:" in stratum.name],
+#         post_hoc_positive=0,
+#     )
+#     population_1 = cacafo.stats.population.stratum_f_estimator(survey_1)
+#     observed_1 = sum([stratum.positive for stratum in survey_1.strata])
+
+#     TP_upper = population_1.upper
+#     return "{:,}".format(TP_upper - observed_1)
+
+# @constant_method
+# def positive_tiles_est(session):
+#     pop_est = session.execute(cacafo.stats.population.estimate_population()).point
+
+#     return "{:,}".format(pop_est)
+
+# @constant_method
+# def positive_tiles_upper(session):
+#     pop_upper = session.execute(cacafo.stats.population.estimate_population()).upper
+
+#     return "{:,}".format(pop_upper)
+
+# @constant_method
+# def total_labeled(session):
+#     survey = session.execute(cacafo.stats.population.Survey.from_db())
+#     labeled = sum([stratum.labeled for stratum in survey.strata])
+
+#     return "{:,}".format(labeled)
+
+# @constant_method
+# def pct_labeled(session):
+#     images_labeled = int(total_labeled())
+#     area_of_CA = 481000
+#     return "{:,}".format(images_labeled/area_of_CA)
+
+@constant_method
+def total_buildings(session):
+    n_buildings = (
+        session.execute(
+            sa.select(sa.func.count(m.Building.id))
+            .select_from(m.Building))
+        .scalars()
+        .one()
+        or 0
+            )
+    return "{:,}".format(n_buildings)
+
+@constant_method
+def total_facilities(session):
+    n_facilities = (session.execute(
+        sa.select(sa.func.count(m.Facility.id))
+        .select_from(m.Facility)
+        .where(m.Facility.archived_at.is_(None)))
+        .scalars()
+        .one()
+        or 0)
+    return "{:,}".format(n_facilities)
+
+#this would have worked with the peewee model but I don't think works now
+# @constant_method
+# def high_likelihood_labeled(session):
+#     labeled_count =  ( session.execute(
+#             sa.select(sa.func.count())
+#             .select_from(m.Image)
+#             .where(m.Image.stratum.in_(["completed",
+#             "post hoc"])))
+#         .scalars()
+#         .one()
+#         or 0)
+#     return "{:,}".format(labeled_count)
+
+@constant_method
+def pct_image_labeled(session):
+    labeled_count =  ( session.execute(
+            sa.select(sa.func.count())
+            .select_from(m.Image)
+            .where(m.Image.label_status != "unlabeled"))
+        .scalars()
+        .one()
+        or 0)
+    total_images = (session.execute(
+            sa.select(sa.func.count())
+            .select_from(m.Image))
+             .scalars()
+            .one()
+            or 0)
+    return "{:,}".format(labeled_count/total_images)
 
 
 @click.command("constants")
