@@ -1,3 +1,4 @@
+import datetime
 import os
 from typing import List
 
@@ -143,6 +144,46 @@ def get_geometries_from_annnotation_data(
             else:
                 raise ValueError("Unexpected geometry type")
     return geometries
+
+
+def format_blank_annotation(image_name, created_at=None):
+    if not created_at:
+        created_at = datetime.datetime.now().isoformat()
+    template = {
+        "id": "n/a - not a dataloop item",
+        "datasetId": "n/a - not a dataloop item",
+        "url": "n/a - not a dataloop item",
+        "dataset": "n/a - not a dataloop item",
+        "createdAt": "FILL ME IN",
+        "notes": "this item was created after manual review outside of dataloop, but put in dataloop format for consistency",
+        "name": "imagename_fillmein.jpg",
+        "creator": "vim@law.stanford.edu",
+        "annotations": [
+            {
+                "id": "n/a - not a dataloop item",
+                "datasetId": "n/a - not a dataloop item",
+                "itemId": "n/a - not a dataloop item",
+                "url": "n/a - not a dataloop item",
+                "item": "n/a - not a dataloop item",
+                "dataset": "n/a - not a dataloop item",
+                "type": "class",
+                "label": "Blank",
+                "attributes": [],
+                "creator": "vim@law.stanford.edu",
+                "createdAt": "FILL ME IN",
+                "updatedBy": None,
+                "updatedAt": None,
+            }
+        ],
+        "annotationsCount": 1,
+        "annotated": True,
+    }
+    template["createdAt"] = created_at
+    if not image_name.endswith(".jpeg") or not image_name.endswith(".jpg"):
+        image_name += ".jpeg"
+    template["name"] = image_name
+    template["annotations"][0]["createdAt"] = created_at
+    return template
 
 
 def main():
