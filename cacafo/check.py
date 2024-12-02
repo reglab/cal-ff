@@ -320,8 +320,7 @@ def facilities_that_are_cafos(verbose=False):
         .scalars()
         .all()
     )
-    cafos = [f for f in facilities if f.is_cafo]
-    return len(cafos)
+    return len(facilities)
 
 
 @check(expected=lambda value: value < 700 and value > 400)
