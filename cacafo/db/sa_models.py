@@ -685,6 +685,32 @@ class UrbanMask(PublicBase):
     geometry: Mapped[Geometry] = mapped_column(Geometry("GEOMETRY", srid=DEFAULT_SRID))
 
 
+class IrrAnnotation(PublicBase):
+    __tablename__ = "irr_annotation"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    annotated_at: Mapped[datetime] = mapped_column(sa.DateTime)
+    annotator: Mapped[str]
+    data: Mapped[dict] = mapped_column(JSON)
+    hash: Mapped[str] = mapped_column(
+        sa.String,
+        default=lambda context: ImageAnnotation._generate_hash_on_insert(context),
+        unique=True,
+    )
+
+    image_id: Mapped[int] = mapped_column(sa.ForeignKey("image.id"), nullable=True)
+    image = relationship("Image", back_populates="annotations")
+
+    @staticmethod
+    def _generate_hash_on_insert(context):
+        params = context.get_current_parameters()
+        if params["hash"] is None:
+            params["hash"] = hashlib.md5(
+                json.dumps(params["data"], sort_keys=True).encode()
+            ).hexdigest()
+        return params["hash"]
+
+
 MODELS = PublicBase.__subclasses__()
 MODEL_MAP = {model.__tablename__: model for model in MODELS}
 
