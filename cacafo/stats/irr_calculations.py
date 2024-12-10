@@ -119,7 +119,7 @@ if __name__ == "__main__":
         f.write("\n")
         f.write(f"Inter-rater Cohen's Kappa matrix:\n {cohens_kappa_matrix(data)}")
         f.write("\n")
-        f.write(f"Inter-rater agreement matrix:\n {cohens_kappa_matrix(data)}")
+        f.write(f"Inter-rater agreement matrix:\n {agree_pct_matrix(data)}")
         f.write("\n")
         f.write(f"Stats by selection category:\n {stats_by_category(data)}")
         f.write("\n")
