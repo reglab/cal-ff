@@ -56,7 +56,7 @@ def overall_agree_pct(data):
     assert data['image_id'].iloc[::2].array == data['image_id'].iloc[1::2].array, "Image ids unlaigned"
     y1 = data['is_cafo'].iloc[::2].array
     y2 = data['is_cafo'].iloc[1::2].array
-    return sum(y1 == y2)/(len(y1)+len(y2))
+    return sum(y1 == y2)/(len(y1))
 
 def cohens_kappa_matrix(data):
     raters = data['annotator'].unique()
@@ -87,7 +87,7 @@ def agree_pct_matrix(data):
             assert d_ij['image_id'].iloc[::2].array == d_ij['image_id'].iloc[1::2].array, f"Image ids unlaigned, {i, j}"
             y1 = d_ij['is_cafo'].iloc[::2].array
             y2 = d_ij['is_cafo'].iloc[1::2].array
-            mat[i, j] = sum(y1 == y2)/(len(y1)+len(y2))
+            mat[i, j] = sum(y1 == y2)/(len(y1))
     return pd.DataFrame(mat, index = raters, columns = raters)
 
 def stats_by_category(data):
@@ -103,8 +103,8 @@ def stats_by_category(data):
         y2 = d_c['is_cafo'].iloc[1::2].array
         assert len(y1)==len(y2)
         kappas.append(cohen_kappa_score(y1, y2))
-        agrees.append(sum(y1 == y2)/(len(y1)+len(y2)))
-        totals+=len(y1)+len(y2)
+        agrees.append(sum(y1 == y2)/(len(y1)))
+        totals+=len(y1)
     return pd.DataFrame({'image category':categories, 
                          "Cohen's Kappa": kappas, 
                          "Agreement percent": agrees},
