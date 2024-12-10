@@ -1,4 +1,4 @@
-import csv
+import csv, os
 import datetime
 import json
 import typing as t
@@ -559,6 +559,52 @@ def urban_mask(session, file_path=None):
         )
     session.commit()
 
+@ingestor(m.IrrAnnotation, depends_on=[m.Image])
+def irr_annotation(session, file_path=None):
+    file_path = file_path or get_data_path('source/ca_irr')
+    annotations = []
+    for fn in os.listdir(file_path):
+        if os.path.splitext(fn)[-1] != '.jsonl':
+            continue
+        path = os.path.join(file_path, fn)
+        annotator = fn.split('_')[0] #first part of the file name should be annotator name
+        with open(path) as f:
+            image_name_to_id = {
+                name: id
+                for name, id in session.execute(sa.select(m.Image.name, m.Image.id)).all()
+            }
+            lines = [json.loads(line.strip()) for line in f.readlines() if line.strip()]
+            for line in rich.progress.track(
+                lines, description="Ingesting IRR image annotations"
+            ):
+                filename = _dig(line, "filename") or _dig(line, "name")
+                if filename is None:
+                    continue
+                image = (image_name_to_id[filename.split("/")[-1].replace(".jpeg", "")],)
+                annotations.append(
+                    {
+                        "annotator": annotator,
+                        "data": line,
+                        "annotated_at": datetime.datetime.fromisoformat(
+                            _dig(line, "annotations", 0, "createdAt") or line["createdAt"]
+                        ),
+                        "image_id": image[0],
+                    }
+                )
+        if len(annotations) > 5000:
+            session.execute(
+                postgresql.insert(m.IrrAnnotation).on_conflict_do_nothing(
+                    index_elements=[m.IrrAnnotation.hash]
+                ),
+                annotations,
+            )
+            annotations = []
+    session.execute(
+        postgresql.insert(m.IrrAnnotation).on_conflict_do_nothing(
+            index_elements=[m.IrrAnnotation.hash]
+        ),
+        annotations,
+    )
 
 def status():
     session = get_sqlalchemy_session()

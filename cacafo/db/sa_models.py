@@ -196,6 +196,9 @@ class Image(PublicBase):
     annotations: Mapped[list["ImageAnnotation"]] = relationship(
         "ImageAnnotation", back_populates="image"
     )
+    irr_annotations: Mapped[list["IrrAnnotation"]] = relationship(
+        "IrrAnnotation", back_populates="image"
+    )
 
     @property
     def label_status(self):
@@ -699,7 +702,7 @@ class IrrAnnotation(PublicBase):
     )
 
     image_id: Mapped[int] = mapped_column(sa.ForeignKey("image.id"), nullable=True)
-    image = relationship("Image", back_populates="annotations")
+    image = relationship("Image", back_populates="irr_annotations")
 
     @staticmethod
     def _generate_hash_on_insert(context):
