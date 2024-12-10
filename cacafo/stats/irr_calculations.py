@@ -51,8 +51,10 @@ def overall_cohens_kappa(data):
     return cohen_kappa_score(y1, y2)
 
 def overall_agree_pct(data):
-    agree = data.groupby('image_id')['is_cafo'].nunique().eq(1).astype(int)
-    return sum(agree)/len(agree)
+    data = data.sort_values('image_id')
+    y1 = data['is_cafo'].iloc[::2].array
+    y2 = data['is_cafo'].iloc[1::2].array
+    return sum(y1 == y2)/(len(y1)+len(y2))
 
 def cohens_kappa_matrix(data):
     raters = data['annotator'].unique()
