@@ -45,6 +45,7 @@ def load_irr_data(session):
 
 def overall_cohens_kappa(data):
     data = data.sort_values('image_id')
+    assert data['image_id'].iloc[::2].array == data['image_id'].iloc[1::2].array, "Image ids unlaigned"
     y1 = data['is_cafo'].iloc[::2].array
     y2 = data['is_cafo'].iloc[1::2].array
     assert len(y1) == len(y2), "Every image was not labeled twice"
@@ -52,6 +53,7 @@ def overall_cohens_kappa(data):
 
 def overall_agree_pct(data):
     data = data.sort_values('image_id')
+    assert data['image_id'].iloc[::2].array == data['image_id'].iloc[1::2].array, "Image ids unlaigned"
     y1 = data['is_cafo'].iloc[::2].array
     y2 = data['is_cafo'].iloc[1::2].array
     return sum(y1 == y2)/(len(y1)+len(y2))
@@ -66,6 +68,7 @@ def cohens_kappa_matrix(data):
                 continue
             d_ij = d_i.groupby('image_id').filter(lambda x: any(x['annotator'] == raters[j]))
             d_ij = d_ij.sort_values('image_id')
+            assert d_ij['image_id'].iloc[::2].array == d_ij['image_id'].iloc[1::2].array, f"Image ids unlaigned, {i, j}"
             y1 = d_ij['is_cafo'].iloc[::2].array
             y2 = d_ij['is_cafo'].iloc[1::2].array
             mat[i, j] = cohen_kappa_score(y1, y2)
@@ -81,6 +84,7 @@ def agree_pct_matrix(data):
                 continue
             d_ij = d_i.groupby('image_id').filter(lambda x: any(x['annotator'] == raters[j]))
             d_ij = d_ij.sort_values('image_id')
+            assert d_ij['image_id'].iloc[::2].array == d_ij['image_id'].iloc[1::2].array, f"Image ids unlaigned, {i, j}"
             y1 = d_ij['is_cafo'].iloc[::2].array
             y2 = d_ij['is_cafo'].iloc[1::2].array
             mat[i, j] = sum(y1 == y2)/(len(y1)+len(y2))
@@ -94,6 +98,7 @@ def stats_by_category(data):
     for c in categories:
         d_c = data[data['image_category'] == c]
         d_c = d_c.sort_values('image_id')
+        assert d_c['image_id'].iloc[::2].array == d_c['image_id'].iloc[1::2].array, f"Image ids unlaigned, {c}"
         y1 = d_c['is_cafo'].iloc[::2].array
         y2 = d_c['is_cafo'].iloc[1::2].array
         assert len(y1)==len(y2)
