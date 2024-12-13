@@ -1,18 +1,21 @@
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from typing import Union
 
 import numpy as np
 import pandas as pd
-import peewee as pw
+import sqlalchemy as sa
 from scipy.stats import f
 from statsmodels.stats.proportion import proportion_confint
 
-from cacafo.db.models import *
+import cacafo.db.sa_models as m
+from cacafo.db.session import get_sqlalchemy_session
+
+BOOTSTRAP_ITERATIONS = None
 
 
 def bootstrap_recall(strata_df):
+    assert BOOTSTRAP_ITERATIONS, "Number of bootstrap iterations not set"
     distributions = []
     for i, row in strata_df.iterrows():
         if row["stratum"] == "post hoc":
@@ -34,56 +37,35 @@ def bootstrap_recall(strata_df):
 
 
 def db_strata_counts():
-    unlabeled_image = Image.label_status == "unlabeled"
-    labeled_image = (Image.label_status != "unlabeled") & (
-        Image.label_status != "removed"
-    )
-    PositiveImage = Image.alias()
-    # this is a workaround for a peewee bug
-    # see https://github.com/coleifer/peewee/issues/2873
-    subquery = pw.NodeList(
-        (
-            pw.SQL("("),
-            PositiveImage.select(PositiveImage.id)
-            .join(Building)
-            .where(Building.cafo)
-            .distinct(),
-            pw.SQL(")"),
+    session = get_sqlalchemy_session()
+
+    query = session.execute(
+        sa.select(
+            m.Image,
         )
+    ).all()
+    data = []
+    import tqdm
+
+    for (im,) in tqdm.tqdm(query):
+        data.append(
+            {
+                "stratum": im.stratum,
+                "positive": im.is_positive,
+                "label_status": im.label_status,
+            }
+        )
+    df = pd.DataFrame(data)  # pd.DataFrame([r._asdict() for r in query])
+    df = (
+        df.groupby("stratum")
+        .agg(
+            unlabeled=("label_status", lambda x: sum(x == "unlabeled")),
+            labeled=("label_status", lambda x: sum(~x.isin(["unlabeled", "removed"]))),
+            positive=("positive", "sum"),
+        )
+        .reset_index()
     )
 
-    positive_image = Image.id.in_(subquery)
-
-    query = (
-        Image.select(
-            Image.stratum,
-            pw.fn.COUNT("*").alias("n_images"),
-            pw.fn.SUM(
-                pw.Case(
-                    None,
-                    [(unlabeled_image, 1)],
-                    0,
-                )
-            ).alias("unlabeled"),
-            pw.fn.SUM(
-                pw.Case(
-                    None,
-                    [(labeled_image, 1)],
-                    0,
-                )
-            ).alias("labeled"),
-            pw.fn.SUM(
-                pw.Case(
-                    None,
-                    [(positive_image, 1)],
-                    0,
-                )
-            ).alias("positive"),
-        )
-        .group_by(Image.stratum)
-        .dicts()
-    )
-    df = pd.DataFrame(query)
     return df
 
 
@@ -237,9 +219,14 @@ class Stratum:
 
 def mean_facilities_per_image():
     total_positive_images = (
-        Image.select(Image.id).join(Building).where(Building.cafo).distinct().count()
+        m.Image.select(m.Image.id)
+        .join()
+        .join(m.Building)
+        .where(m.Building.cafo)
+        .distinct()
+        .count()
     )
-    total_facilities = Facility.select().count()
+    total_facilities = m.Facility.select().count()
     return total_facilities / total_positive_images
 
 
@@ -416,19 +403,19 @@ def naip_stratum_f_estimator(survey, alpha=0.05):
         strata=[stratum for stratum in survey.strata if "1:" in stratum.name],
         post_hoc_positive=0,
     )
-    completed_survey = Survey(
-        strata=[stratum for stratum in survey.strata if stratum.unlabeled == 0],
-        post_hoc_positive=survey.post_hoc_positive,
-    )
+    # completed_survey = Survey(
+    #    strata=[stratum for stratum in survey.strata if stratum.unlabeled == 0],
+    #    post_hoc_positive=survey.post_hoc_positive,
+    # )
     population_0 = stratum_f_estimator(survey_0, alpha=alpha)
     population_1 = stratum_f_estimator(survey_1, alpha=alpha)
     post_hoc = survey.post_hoc_positive
     completed_strata = [stratum for stratum in survey.strata if stratum.unlabeled == 0]
     completed_population = sum(stratum.positive for stratum in completed_strata)
     return Estimate(
-        point=population_0.point + population_1.point + completed_population,
-        lower=population_0.lower + population_1.lower + completed_population,
-        upper=population_0.upper + population_1.upper + completed_population,
+        point=population_0.point + population_1.point + completed_population + post_hoc,
+        lower=population_0.lower + population_1.lower + completed_population + post_hoc,
+        upper=population_0.upper + population_1.upper + completed_population + post_hoc,
     )
 
 
@@ -521,8 +508,6 @@ def one_stratum_standard_ci(n, p, alpha=0.05, method="beta"):
 
 
 def plot_comparison():
-    import itertools
-
     import matplotlib.pyplot as plt
     import seaborn as sns
 
@@ -599,9 +584,13 @@ def compare_strategies():
 
 def number_of_images_per_facility():
     total_positive_images = (
-        Image.select(Image.id).join(Building).where(Building.cafo).distinct().count()
+        m.Image.select(m.Image.id)
+        .join(m.Building)
+        .where(m.Building.cafo)
+        .distinct()
+        .count()
     )
-    total_facilities = Facility.select().count()
+    total_facilities = m.Facility.select().count()
     return total_positive_images / total_facilities
 
 
