@@ -8,3 +8,6 @@ venv/
 *cache*
 nohup.out
 ./data/
+
+/data/
+/dist/
