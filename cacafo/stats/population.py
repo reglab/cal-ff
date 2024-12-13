@@ -10,6 +10,7 @@ from statsmodels.stats.proportion import proportion_confint
 
 import cacafo.db.sa_models as m
 from cacafo.db.session import get_sqlalchemy_session
+from cacafo.query import positive_images
 
 BOOTSTRAP_ITERATIONS = None
 
@@ -38,23 +39,26 @@ def bootstrap_recall(strata_df):
 
 def db_strata_counts():
     session = get_sqlalchemy_session()
-
+    subquery = positive_images().subquery()
     query = session.execute(
-        sa.select(
-            m.Image,
-        )
+        sa.select(m.Image, m.Image.id.in_(sa.select(subquery.c.id)))
     ).all()
     data = []
+    import time
+
     import tqdm
 
-    for (im,) in tqdm.tqdm(query):
-        data.append(
-            {
-                "stratum": im.stratum,
-                "positive": im.is_positive,
-                "label_status": im.label_status,
-            }
-        )
+    for im, pos in tqdm.tqdm(query):
+        s = time.time()
+        strat = im.stratum
+        print(f"stratum calc time: {time.time()-s}")
+        # s = time.time()
+        # pos = im.is_positive
+        # print(f'positive calc time: {time.time() - s}')
+        # s = time.time()
+        ls = im.label_status
+        print(f"label status time: {time.time() - s}")
+        data.append({"stratum": strat, "positive": pos, "label_status": ls})
     df = pd.DataFrame(data)  # pd.DataFrame([r._asdict() for r in query])
     df = (
         df.groupby("stratum")
