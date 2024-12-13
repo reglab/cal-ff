@@ -219,15 +219,17 @@ class Image(PublicBase):
         if self.bucket in completed_buckets:
             return "completed"
 
-        # necessary because we don't store adjacent image labeling
-        from cacafo.query import initially_labeled_images
+        if not hasattr(Image, "_INIT_IMAGES"):
+            from cacafo.query import initially_labeled_images
 
-        session = sa.orm.object_session(self)
-        initial_images = session.execute(
-            sa.select(initially_labeled_images().subquery().c.id)
-        ).all()
+            session = sa.orm.object_session(self)
+            initial_images = session.execute(initially_labeled_images()).all()
+            initial_images = {image.id for image in initial_images}
+            Image._INIT_IMAGES = initial_images
+        else:
+            initial_images = Image._INIT_IMAGES
 
-        if self.id in [x[0] for x in initial_images]:
+        if self.id in initial_images:
             return "completed"
 
         return f"{self.bucket}:{self.county.county_group.name}"
