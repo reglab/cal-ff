@@ -74,11 +74,12 @@ _IMAGES = None
 def images(session):
     global _IMAGES
     if _IMAGES is None:
-        _IMAGES = session.execute(
-            (sa.select(m.Image))
-            .options(
-                sa.orm.selectinload(m.Image.annotations),
-                sa.orm.selectinload(m.Image.county),
+        _IMAGES = (
+            session.execute(
+                (sa.select(m.Image)).options(
+                    sa.orm.selectinload(m.Image.annotations),
+                    sa.orm.selectinload(m.Image.county),
+                )
             )
             .unique()
             .all()
@@ -471,13 +472,13 @@ def total_facilities(session):
 @constant_method
 def high_likelihood_labeled(session):
     imgs = images(session)
-    return "{:,}".format(sum([x.stratum == "completed" for x in imgs]))
+    return "{:,}".format(sum([x.stratum == "completed" for (x,) in imgs]))
 
 
 @constant_method
 def pct_image_labeled(session):
     imgs = images(session)
-    labeled_count = sum([x.label_status != "unlabeled" for x in imgs])
+    labeled_count = sum([x.label_status != "unlabeled" for (x,) in imgs])
     total_images = len(imgs)
     return "{:.3f}".format(labeled_count / total_images)
 
