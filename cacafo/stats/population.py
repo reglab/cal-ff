@@ -217,19 +217,6 @@ class Stratum:
         raise NotImplementedError
 
 
-def mean_facilities_per_image():
-    total_positive_images = (
-        m.Image.select(m.Image.id)
-        .join()
-        .join(m.Building)
-        .where(m.Building.cafo)
-        .distinct()
-        .count()
-    )
-    total_facilities = m.Facility.select().count()
-    return total_facilities / total_positive_images
-
-
 @dataclass
 class Survey:
     strata: list[Stratum]
@@ -584,14 +571,32 @@ def compare_strategies():
 
 def number_of_images_per_facility():
     total_positive_images = (
-        m.Image.select(m.Image.id)
+        sa.select(sa.func.count(sa.distinct(m.Image.id)))
+        .select_from(m.Image)
+        .join(m.ImageAnnotation)
         .join(m.Building)
-        .where(m.Building.cafo)
-        .distinct()
-        .count()
+        .where(m.Building.excluded_at.is_(None))
+        .scalar_subquery()
     )
-    total_facilities = m.Facility.select().count()
-    return total_positive_images / total_facilities
+    total_facilities = (
+        sa.select(sa.func.count()).select_from(m.Facility).scalar_subquery()
+    )
+    return sa.func.div(total_positive_images, total_facilities)
+
+
+def mean_facilities_per_image():
+    total_positive_images = (
+        sa.select(sa.func.count(sa.distinct(m.Image.id)))
+        .select_from(m.Image)
+        .join(m.ImageAnnotation)
+        .join(m.Building)
+        .where(m.Building.excluded_at.is_(None))
+        .scalar_subquery()
+    )
+    total_facilities = (
+        sa.select(sa.func.count()).select_from(m.Facility).scalar_subquery()
+    )
+    return sa.func.div(total_facilities, total_positive_images)
 
 
 def estimate_population():
