@@ -40,26 +40,22 @@ def bootstrap_recall(strata_df):
 def db_strata_counts():
     session = get_sqlalchemy_session()
     subquery = positive_images().subquery()
-    query = session.execute(
-        sa.select(m.Image, m.Image.id.in_(sa.select(subquery.c.id)))
-    ).all()
+    query = (
+        session.execute(
+            sa.select(m.Image, m.Image.id.in_(sa.select(subquery.c.id))).options(
+                sa.orm.selectinload(m.Image.annotations),
+                sa.orm.selectinload(m.Image.county),
+            )
+        )
+        .unique()
+        .all()
+    )
     data = []
-    import time
-
-    import tqdm
-
-    for im, pos in tqdm.tqdm(query):
-        s = time.time()
-        strat = im.stratum
-        print(f"stratum calc time: {time.time()-s}")
-        # s = time.time()
-        # pos = im.is_positive
-        # print(f'positive calc time: {time.time() - s}')
-        # s = time.time()
-        ls = im.label_status
-        print(f"label status time: {time.time() - s}")
-        data.append({"stratum": strat, "positive": pos, "label_status": ls})
-    df = pd.DataFrame(data)  # pd.DataFrame([r._asdict() for r in query])
+    for im, pos in query:
+        data.append(
+            {"stratum": im.stratum, "positive": pos, "label_status": im.label_status}
+        )
+    df = pd.DataFrame(data)
     df = (
         df.groupby("stratum")
         .agg(
