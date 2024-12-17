@@ -581,7 +581,7 @@ def number_of_images_per_facility():
     total_facilities = (
         sa.select(sa.func.count()).select_from(m.Facility).scalar_subquery()
     )
-    return sa.func.div(total_positive_images, total_facilities)
+    return sa.select(total_positive_images / total_facilities)
 
 
 def mean_facilities_per_image():
@@ -596,7 +596,8 @@ def mean_facilities_per_image():
     total_facilities = (
         sa.select(sa.func.count()).select_from(m.Facility).scalar_subquery()
     )
-    return sa.func.div(total_facilities, total_positive_images)
+
+    return sa.select(total_facilities / total_positive_images)
 
 
 def estimate_population():
