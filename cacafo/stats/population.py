@@ -266,7 +266,7 @@ class Survey:
     def aggregated(self):
         post_hoc = self.post_hoc_positive
         completed_strata = [
-            stratum for stratum in self.strata if stratum.unlabeled == 0
+            stratum for stratum in self.strata if stratum.name == "completed"
         ]
         lowest_sampling_rate_0 = min(
             stratum.labeled / stratum.total
@@ -398,7 +398,7 @@ def naip_stratum_f_estimator(survey, alpha=0.05):
     population_1 = stratum_f_estimator(survey_1, alpha=alpha)
     post_hoc = survey.post_hoc_positive
     completed_strata = [
-        stratum for stratum in survey.strata if stratum.stratum == "completed"
+        stratum for stratum in survey.strata if stratum.name == "completed"
     ]
     completed_population = sum(stratum.positive for stratum in completed_strata)
     return Estimate(
