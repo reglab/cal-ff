@@ -581,7 +581,10 @@ def number_of_images_per_facility():
         .scalar_subquery()
     )
     total_facilities = (
-        sa.select(sa.func.count()).select_from(m.Facility).scalar_subquery()
+        sa.select(sa.func.count())
+        .select_from(m.Facility)
+        .where(m.Facility.archived_at.is_(None))
+        .scalar_subquery()
     )
     return sa.select(total_positive_images / total_facilities)
 
@@ -596,7 +599,10 @@ def mean_facilities_per_image():
         .scalar_subquery()
     )
     total_facilities = (
-        sa.select(sa.func.count()).select_from(m.Facility).scalar_subquery()
+        sa.select(sa.func.count())
+        .select_from(m.Facility)
+        .where(m.Facility.archived_at.is_(None))
+        .scalar_subquery()
     )
 
     return sa.select(total_facilities / total_positive_images)
