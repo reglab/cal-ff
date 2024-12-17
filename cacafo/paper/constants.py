@@ -438,9 +438,10 @@ def total_labeled(session):
 
 @constant_method
 def pct_labeled(session):
-    images_labeled = len(cafos(session))
+    survey = img_survey()
+    labeled = sum([stratum.labeled for stratum in survey.strata])
     area_of_CA = 481000
-    return "{:.3f}".format(images_labeled / area_of_CA)
+    return "{:.3f}".format(labeled / area_of_CA)
 
 
 @constant_method
