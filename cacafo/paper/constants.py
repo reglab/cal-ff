@@ -7,9 +7,10 @@ import sqlalchemy as sa
 
 import cacafo.db.sa_models as m
 import cacafo.query
-from cacafo.db.session import get_sqlalchemy_session
 import cacafo.stats
+import cacafo.stats.irr
 import cacafo.stats.population
+from cacafo.db.session import get_sqlalchemy_session
 from cacafo.transform import to_meters
 
 CONSTANT_METHODS = []
@@ -230,24 +231,32 @@ def large_active_permits_with_no_close_facilities(session):
     ]
     return "{:,}".format(len(unmatched_permits))
 
+
 @constant_method
 def total_permits(session):
     permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
     return "{:,}".format(len(permits))
 
+
 @constant_method
 def large_permits(session):
     permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
 
-    large_permits = [p for p in permits if (p.animal_count is not None) and p.animal_count >= 200]
+    large_permits = [
+        p for p in permits if (p.animal_count is not None) and p.animal_count >= 200
+    ]
     return "{:,}".format(len(large_permits))
+
 
 @constant_method
 def small_permits(session):
     permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
 
-    small_permits = [p for p in permits if (p.animal_count is not None) and p.animal_count < 200]
+    small_permits = [
+        p for p in permits if (p.animal_count is not None) and p.animal_count < 200
+    ]
     return "{:,}".format(len(small_permits))
+
 
 @constant_method
 def no_animal_count_permits(session):
@@ -256,9 +265,10 @@ def no_animal_count_permits(session):
     no_animal_count_permits = [p for p in permits if p.animal_count is None]
     return "{:,}".format(len(no_animal_count_permits))
 
-#this doesn't work because I need to refactor the stats script for sql alchemy over peewee
-#@constant_method
-#def fac_to_im_ratio(session):
+
+# this doesn't work because I need to refactor the stats script for sql alchemy over peewee
+# @constant_method
+# def fac_to_im_ratio(session):
 #    return "{:,}".format(session.execute(cacafo.stats.population.number_of_images_per_facility()))
 
 # @constant_method
@@ -379,30 +389,34 @@ def no_animal_count_permits(session):
 #     area_of_CA = 481000
 #     return "{:,}".format(images_labeled/area_of_CA)
 
+
 @constant_method
 def total_buildings(session):
     n_buildings = (
-        session.execute(
-            sa.select(sa.func.count(m.Building.id))
-            .select_from(m.Building))
+        session.execute(sa.select(sa.func.count(m.Building.id)).select_from(m.Building))
         .scalars()
         .one()
         or 0
-            )
+    )
     return "{:,}".format(n_buildings)
+
 
 @constant_method
 def total_facilities(session):
-    n_facilities = (session.execute(
-        sa.select(sa.func.count(m.Facility.id))
-        .select_from(m.Facility)
-        .where(m.Facility.archived_at.is_(None)))
+    n_facilities = (
+        session.execute(
+            sa.select(sa.func.count(m.Facility.id))
+            .select_from(m.Facility)
+            .where(m.Facility.archived_at.is_(None))
+        )
         .scalars()
         .one()
-        or 0)
+        or 0
+    )
     return "{:,}".format(n_facilities)
 
-#this would have worked with the peewee model but I don't think works now
+
+# this would have worked with the peewee model but I don't think works now
 # @constant_method
 # def high_likelihood_labeled(session):
 #     labeled_count =  ( session.execute(
@@ -415,22 +429,29 @@ def total_facilities(session):
 #         or 0)
 #     return "{:,}".format(labeled_count)
 
+
 @constant_method
 def pct_image_labeled(session):
-    labeled_count =  ( session.execute(
+    labeled_count = (
+        session.execute(
             sa.select(sa.func.count())
             .select_from(m.Image)
-            .where(m.Image.label_status != "unlabeled"))
+            .where(m.Image.label_status != "unlabeled")
+        )
         .scalars()
         .one()
-        or 0)
-    total_images = (session.execute(
-            sa.select(sa.func.count())
-            .select_from(m.Image))
-             .scalars()
-            .one()
-            or 0)
-    return "{:,}".format(labeled_count/total_images)
+        or 0
+    )
+    total_images = (
+        session.execute(sa.select(sa.func.count()).select_from(m.Image)).scalars().one()
+        or 0
+    )
+    return "{:,}".format(labeled_count / total_images)
+
+
+@constant_method
+def irr(session):
+    return "{:.2f}".format(cacafo.stats.irr.label_balanced_cohens_kappa(session))
 
 
 @click.command("constants")

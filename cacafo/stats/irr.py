@@ -1,15 +1,19 @@
+import random
+
 import numpy as np
 import pandas as pd
 import rl
+import sklearn.metrics as metrics
 import sqlalchemy as sa
-from sklearn.metrics import cohen_kappa_score
 
 import cacafo.db.sa_models as m
 import cacafo.query as query
 from cacafo.db.session import get_sqlalchemy_session
 
+_IRR_DATA = None
 
-def load_irr_data(session):
+
+def image_category_map(session):
     positive_images = session.execute(query.positive_images()).scalars().all()
     labeled_negative_images = (
         session.execute(query.labeled_negative_images()).scalars().all()
@@ -20,51 +24,95 @@ def load_irr_data(session):
     low_confidence_negative_images = (
         session.execute(query.low_confidence_negative_images()).scalars().all()
     )
+    return (
+        {x.id: "positive" for x in positive_images}
+        | {x.id: "labeled negative" for x in labeled_negative_images}
+        | {x.id: "high confidence negative" for x in high_confidence_negative_images}
+        | {x.id: "low confidence negative" for x in low_confidence_negative_images}
+    )
 
-    image_ids = {
-        "positive": [x.id for x in positive_images],
-        "labeled negative": [x.id for x in labeled_negative_images],
-        "high confidence negative": [x.id for x in high_confidence_negative_images],
-        "low confidence negative": [x.id for x in low_confidence_negative_images],
+
+def image_id_map(session):
+    positive_images = session.execute(query.positive_images()).scalars().all()
+    labeled_negative_images = (
+        session.execute(query.labeled_negative_images()).scalars().all()
+    )
+    high_confidence_negative_images = (
+        session.execute(query.high_confidence_negative_images()).scalars().all()
+    )
+    low_confidence_negative_images = (
+        session.execute(query.low_confidence_negative_images()).scalars().all()
+    )
+    return {
+        x.id: x
+        for x in positive_images
+        + labeled_negative_images
+        + high_confidence_negative_images
+        + low_confidence_negative_images
     }
+
+
+def load_irr_data(session, cache=True):
+    global _IRR_DATA
+    if cache and _IRR_DATA is not None:
+        return _IRR_DATA
+
+    _image_id_map = image_id_map(session)
+    _image_category_map = image_category_map(session)
+
     annotations = session.scalars(sa.select(m.IrrAnnotation))
     data = []
     for row in annotations:
         is_cafo = any([x["label"] == "cafo" for x in row.data["annotations"]])
-        image_category = [x for x in image_ids if row.image_id in image_ids[x]][0]
+        image_category = _image_category_map[row.image_id]
         data.append(
             {
                 "image_id": row.image_id,
                 "annotator": row.annotator,
                 "is_cafo": is_cafo,
                 "image_category": image_category,
+                "bucket": _image_id_map[row.image_id].bucket,
             }
         )
-    return pd.DataFrame(data)
+    _IRR_DATA = pd.DataFrame(data)
+    return _IRR_DATA
 
 
-def overall_cohens_kappa(data):
-    data = data.sort_values("image_id")
+def pairwise_irr_data(session, cache=True):
+    df = load_irr_data(session, cache)
+    df = df.sort_values("image_id")
     assert (
-        data["image_id"].iloc[::2].array == data["image_id"].iloc[1::2].array
-    ), "Image ids unlaigned"
-    y1 = data["is_cafo"].iloc[::2].array
-    y2 = data["is_cafo"].iloc[1::2].array
-    assert len(y1) == len(y2), "Every image was not labeled twice"
-    return cohen_kappa_score(y1, y2)
+        df["image_id"].iloc[::2].array == df["image_id"].iloc[1::2].array
+    ), "Image ids unaligned"
+    y1 = df["is_cafo"].iloc[::2].array
+    y2 = df["is_cafo"].iloc[1::2].array
+    y1_name = df["annotator"].iloc[::2].array
+    y2_name = df["annotator"].iloc[1::2].array
+    return pd.DataFrame(
+        {
+            "image_id": df["image_id"].iloc[::2].array,
+            "annotator_1": y1_name,
+            "annotator_2": y2_name,
+            "is_cafo_1": y1,
+            "is_cafo_2": y2,
+            "image_category": df["image_category"].iloc[::2].array,
+            "bucket": df["bucket"].iloc[::2].array,
+        }
+    )
 
 
-def overall_agree_pct(data):
-    data = data.sort_values("image_id")
-    assert (
-        data["image_id"].iloc[::2].array == data["image_id"].iloc[1::2].array
-    ), "Image ids unlaigned"
-    y1 = data["is_cafo"].iloc[::2].array
-    y2 = data["is_cafo"].iloc[1::2].array
-    return sum(y1 == y2) / (len(y1))
+def overall_cohens_kappa(session):
+    df = pairwise_irr_data(session)
+    return metrics.cohen_kappa_score(df["is_cafo_1"], df["is_cafo_2"])
 
 
-def cohens_kappa_matrix(data):
+def overall_agree_pct(session):
+    df = pairwise_irr_data(session)
+    return sum(df["is_cafo_1"] == df["is_cafo_2"]) / len(df)
+
+
+def cohens_kappa_matrix(session):
+    data = load_irr_data(session)
     raters = data["annotator"].unique()
     mat = np.ones([len(raters), len(raters)])
     for i in range(len(raters)):
@@ -83,11 +131,12 @@ def cohens_kappa_matrix(data):
             ), f"Image ids unlaigned, {i, j}"
             y1 = d_ij["is_cafo"].iloc[::2].array
             y2 = d_ij["is_cafo"].iloc[1::2].array
-            mat[i, j] = cohen_kappa_score(y1, y2)
+            mat[i, j] = metrics.cohen_kappa_score(y1, y2)
     return pd.DataFrame(mat, index=raters, columns=raters)
 
 
-def agree_pct_matrix(data):
+def agree_pct_matrix(session):
+    data = load_irr_data(session)
     raters = data["annotator"].unique()
     mat = np.ones([len(raters), len(raters)])
     for i in range(len(raters)):
@@ -110,43 +159,110 @@ def agree_pct_matrix(data):
     return pd.DataFrame(mat, index=raters, columns=raters)
 
 
-def stats_by_category(data):
-    categories = data["image_category"].unique()
-    kappas = []
-    agrees = []
-    totals = 0
-    for c in categories:
-        d_c = data[data["image_category"] == c]
-        d_c = d_c.sort_values("image_id")
-        assert (
-            d_c["image_id"].iloc[::2].array == d_c["image_id"].iloc[1::2].array
-        ), f"Image ids unlaigned, {c}"
-        y1 = d_c["is_cafo"].iloc[::2].array
-        y2 = d_c["is_cafo"].iloc[1::2].array
-        assert len(y1) == len(y2)
-        kappas.append(cohen_kappa_score(y1, y2))
-        agrees.append(sum(y1 == y2) / (len(y1)))
-        totals += len(y1)
-    return pd.DataFrame(
-        {
-            "image category": categories,
-            "Cohen's Kappa": kappas,
-            "Agreement percent": agrees,
-        },
-    ).set_index("image category")
+def agreement_report(y1, y2):
+    return {
+        "cohens_kappa": metrics.cohen_kappa_score(y1, y2),
+        "n": len(y1),
+        "n_agree_true": sum(y1 & y2),
+        "n_agree_false": sum(~y1 & ~y2),
+        "n_disagree": sum(y1 != y2),
+        "agreement_pct": sum(y1 == y2) / len(y1),
+    }
+
+
+def stats_by_category(session):
+    df = pairwise_irr_data(session)
+    categories = df["image_category"].unique()
+    return pd.DataFrame.from_records(
+        [
+            {
+                "image_category": c,
+            }
+            | agreement_report(
+                df[df["image_category"] == c]["is_cafo_1"],
+                df[df["image_category"] == c]["is_cafo_2"],
+            )
+            for c in categories
+        ]
+    ).set_index("image_category")
+
+
+def stats_by_bucket(session):
+    df = pairwise_irr_data(session)
+    buckets = df["bucket"].unique()
+    return pd.DataFrame.from_records(
+        [
+            {
+                "bucket": c,
+            }
+            | agreement_report(
+                df[df["bucket"] == c]["is_cafo_1"], df[df["bucket"] == c]["is_cafo_2"]
+            )
+            for c in buckets
+        ]
+    ).set_index("bucket")
+
+
+def stats_by_label_status(session):
+    bucket_map = {
+        "1": "1",
+        "0": "0",
+        1: "1",
+        0: "0",
+    }
+    data = pairwise_irr_data(session)
+    data["label_status"] = data["bucket"].apply(
+        lambda x: bucket_map.get(x, "fully labeled")
+    )
+    label_statuses = data["label_status"].unique()
+    return pd.DataFrame.from_records(
+        [
+            {
+                "label_status": c,
+            }
+            | agreement_report(
+                data[data["label_status"] == c]["is_cafo_1"],
+                data[data["label_status"] == c]["is_cafo_2"],
+            )
+            for c in label_statuses
+        ]
+    ).set_index("label_status")
+
+
+def label_balanced_cohens_kappa(session):
+    class_counts = {
+        "positive": 0,
+        "labeled negative": 0,
+        "high confidence negative": 0,
+        "low confidence negative": 0,
+    }
+    map = image_category_map(session)
+    class_counts.update(
+        {v: sum(w == v for w in map.values()) for v in class_counts.keys()}
+    )
+    df = pairwise_irr_data(session)
+    pairs_by_class = {k: df[df["image_category"] == k] for k in class_counts.keys()}
+
+    random.seed(52)
+    # sample pairs proportional to class counts
+    sample = []
+    for k, v in pairs_by_class.items():
+        sample += v.sample(n=class_counts[k], replace=True).to_dict(orient="records")
+    sample_df = pd.DataFrame(sample)
+    return metrics.cohen_kappa_score(sample_df["is_cafo_1"], sample_df["is_cafo_2"])
 
 
 if __name__ == "__main__":
     session = get_sqlalchemy_session()
     data = load_irr_data(session)
     with open(rl.utils.io.get_data_path("paper", "irr_stats.txt"), "w") as f:
-        f.write(f"All rater Cohen's Kappa: {overall_cohens_kappa(data)}")
+        f.write(f"All rater Cohen's Kappa: {overall_cohens_kappa(session)}")
         f.write("\n")
-        f.write(f"All rater agreement percent: {overall_agree_pct(data)}")
+        f.write(f"All rater agreement percent: {overall_agree_pct(session)}")
         f.write("\n")
-        f.write(f"Inter-rater Cohen's Kappa matrix:\n {cohens_kappa_matrix(data)}")
+        f.write(f"Inter-rater Cohen's Kappa matrix:\n {cohens_kappa_matrix(session)}")
         f.write("\n")
-        f.write(f"Inter-rater agreement matrix:\n {agree_pct_matrix(data)}")
+        f.write(f"Inter-rater agreement matrix:\n {agree_pct_matrix(session)}")
         f.write("\n")
-        f.write(f"Stats by selection category:\n {stats_by_category(data)}")
+        f.write(f"Stats by selection category:\n {stats_by_category(session)}")
         f.write("\n")
