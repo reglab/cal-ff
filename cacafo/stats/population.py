@@ -397,7 +397,9 @@ def naip_stratum_f_estimator(survey, alpha=0.05):
     population_0 = stratum_f_estimator(survey_0, alpha=alpha)
     population_1 = stratum_f_estimator(survey_1, alpha=alpha)
     post_hoc = survey.post_hoc_positive
-    completed_strata = [stratum for stratum in survey.strata if stratum.unlabeled == 0]
+    completed_strata = [
+        stratum for stratum in survey.strata if stratum.stratum == "completed"
+    ]
     completed_population = sum(stratum.positive for stratum in completed_strata)
     return Estimate(
         point=population_0.point + population_1.point + completed_population + post_hoc,

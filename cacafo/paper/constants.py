@@ -344,7 +344,7 @@ def FNR_est(session):
 
     total_images = sum([stratum.total for stratum in survey_0.strata])
     FN_est = population_0.point
-    return "{:.3f}".format(FN_est / total_images)
+    return "{:.4f}".format(FN_est / total_images)
 
 
 @constant_method
@@ -358,7 +358,7 @@ def FNR_upper(session):
 
     total_images = sum([stratum.total for stratum in survey_0.strata])
     FN_upper = population_0.upper
-    return "{:.3f}".format(FN_upper / total_images)
+    return "{:.4f}".format(FN_upper / total_images)
 
 
 @constant_method
