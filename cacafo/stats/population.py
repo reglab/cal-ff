@@ -87,7 +87,7 @@ def db_strata_counts():
 
     data = {}
     for image_id, county_group, bucket in all_image_id_strata:
-        strata = f"{county_group}:{bucket}"
+        strata = f"{bucket}:{county_group}"
         if image_id in initially_labeled_image_ids:
             strata = "completed"
         elif image_id in post_hoc_image_ids:
