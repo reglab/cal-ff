@@ -480,7 +480,9 @@ def high_likelihood_labeled(session):
 def pct_image_labeled(session):
     imgs = images(session)
     labeled_count = sum([x.label_status != "unlabeled" for (x,) in imgs])
-    total_images = len(imgs)
+    total_images = session.execute(
+        sa.select(sa.func.count(m.Image.id).select_from(m.Image))
+    )
     return "{:.3f}".format(labeled_count / total_images)
 
 
