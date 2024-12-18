@@ -321,7 +321,7 @@ def completeness_est(session):
     # convert to n_facilities
     pop_est = pop_est / float(fac_to_im_ratio(session))
     observed = len(cafos(session))
-    return "{:.3f}\%".format(100 * observed / pop_est)
+    return "{:.2f}\%".format(100 * observed / pop_est)
 
 
 @constant_method
@@ -331,7 +331,7 @@ def completeness_lower(session):
     # convert to n_facilities
     pop_upper = pop_upper / float(fac_to_im_ratio(session))
     observed = len(cafos(session))
-    return "{:.3f}\%".format(100 * observed / pop_upper)
+    return "{:.2f}\%".format(100 * observed / pop_upper)
 
 
 @constant_method
@@ -486,7 +486,7 @@ def pct_image_labeled(session):
         .scalars()
         .one()
     )
-    return "{:.3f}\%".format(100 * labeled_count / total_images)
+    return "{:.2f}\%".format(100 * labeled_count / total_images)
 
 
 @constant_method
