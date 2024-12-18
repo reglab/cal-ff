@@ -152,9 +152,9 @@ class Estimate:
     def __rtruediv__(self, other):
         if isinstance(other, (int, float)):
             return Estimate(
-                point=other / self.point,
-                lower=other / self.upper,
-                upper=other / self.lower,
+                point=float("inf") if self.point == 0 else other / self.point,
+                lower=float("inf") if self.lower == 0 else other / self.lower,
+                upper=other / self.upper,
             )
         raise NotImplementedError
 

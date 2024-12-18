@@ -1,6 +1,7 @@
-import csv, os
+import csv
 import datetime
 import json
+import os
 import typing as t
 from dataclasses import dataclass
 
@@ -292,6 +293,18 @@ def image(session, file_path=None):
                 session.flush()
                 images = []
         session.add_all(images)
+    path = cacafo.data.source.get("post_hoc.csv")
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"File {path} not found, post hoc data required.")
+    with open(path) as f:
+        reader = csv.DictReader(f)
+        names = {line["image_name"] for line in reader}
+        # update label_reason to be post hoc for these images
+        session.execute(
+            sa.update(m.Image)
+            .where(m.Image.name.in_(names))
+            .values(label_reason="post_hoc")
+        )
 
 
 def _dig(d: t.Sequence, *keys: list[t.Any]) -> t.Any:
@@ -559,19 +572,24 @@ def urban_mask(session, file_path=None):
         )
     session.commit()
 
+
 @ingestor(m.IrrAnnotation, depends_on=[m.Image])
 def irr_annotation(session, file_path=None):
-    file_path = file_path or get_data_path('source/ca_irr')
+    file_path = file_path or get_data_path("source/ca_irr")
     annotations = []
     for fn in os.listdir(file_path):
-        if os.path.splitext(fn)[-1] != '.jsonl':
+        if os.path.splitext(fn)[-1] != ".jsonl":
             continue
         path = os.path.join(file_path, fn)
-        annotator = fn.split('_')[0] #first part of the file name should be annotator name
+        annotator = fn.split("_")[
+            0
+        ]  # first part of the file name should be annotator name
         with open(path) as f:
             image_name_to_id = {
                 name: id
-                for name, id in session.execute(sa.select(m.Image.name, m.Image.id)).all()
+                for name, id in session.execute(
+                    sa.select(m.Image.name, m.Image.id)
+                ).all()
             }
             lines = [json.loads(line.strip()) for line in f.readlines() if line.strip()]
             for line in rich.progress.track(
@@ -580,13 +598,16 @@ def irr_annotation(session, file_path=None):
                 filename = _dig(line, "filename") or _dig(line, "name")
                 if filename is None:
                     continue
-                image = (image_name_to_id[filename.split("/")[-1].replace(".jpeg", "")],)
+                image = (
+                    image_name_to_id[filename.split("/")[-1].replace(".jpeg", "")],
+                )
                 annotations.append(
                     {
                         "annotator": annotator,
                         "data": line,
                         "annotated_at": datetime.datetime.fromisoformat(
-                            _dig(line, "annotations", 0, "createdAt") or line["createdAt"]
+                            _dig(line, "annotations", 0, "createdAt")
+                            or line["createdAt"]
                         ),
                         "image_id": image[0],
                     }
@@ -605,6 +626,7 @@ def irr_annotation(session, file_path=None):
         ),
         annotations,
     )
+
 
 def status():
     session = get_sqlalchemy_session()
