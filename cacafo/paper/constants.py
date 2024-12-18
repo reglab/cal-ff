@@ -8,6 +8,7 @@ import sqlalchemy as sa
 import cacafo.db.sa_models as m
 import cacafo.query
 import cacafo.stats
+import cacafo.stats.irr
 import cacafo.stats.population
 from cacafo.db.session import get_sqlalchemy_session
 from cacafo.transform import to_meters
@@ -482,6 +483,11 @@ def pct_image_labeled(session):
     labeled_count = sum([x.label_status != "unlabeled" for (x,) in imgs])
     total_images = len(imgs)
     return "{:.3f}".format(labeled_count / total_images)
+
+
+@constant_method
+def irr(session):
+    return "{:.2f}".format(cacafo.stats.irr.label_balanced_cohens_kappa(session))
 
 
 @click.command("constants")
