@@ -321,7 +321,7 @@ def completeness_est(session):
     # convert to n_facilities
     pop_est = pop_est / float(fac_to_im_ratio(session))
     observed = len(cafos(session))
-    return "{:.3f}\%".format(observed / pop_est)
+    return "{:.3f}\%".format(100 * observed / pop_est)
 
 
 @constant_method
@@ -331,7 +331,7 @@ def completeness_lower(session):
     # convert to n_facilities
     pop_upper = pop_upper / float(fac_to_im_ratio(session))
     observed = len(cafos(session))
-    return "{:.3f}\%".format(observed / pop_upper)
+    return "{:.3f}\%".format(100 * observed / pop_upper)
 
 
 @constant_method
@@ -442,7 +442,7 @@ def pct_labeled(session):
     survey = img_survey()
     labeled = sum([stratum.labeled for stratum in survey.strata])
     area_of_CA = 481000
-    return "{:.3f}".format(labeled / area_of_CA)
+    return "{:.3f}\%".format(100 * labeled / area_of_CA)
 
 
 @constant_method
@@ -486,7 +486,7 @@ def pct_image_labeled(session):
         .scalars()
         .one()
     )
-    return "{:.3f}".format(labeled_count / total_images)
+    return "{:.3f}\%".format(100 * labeled_count / total_images)
 
 
 @constant_method
