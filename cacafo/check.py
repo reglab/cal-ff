@@ -536,7 +536,10 @@ def _cli(verbose, check):
         name = func.__name__.replace("_", " ")
         if isinstance(expected, int):
             expected_int = expected
-            expected = lambda x: x == expected  # noqa E731
+
+            def expected(x):
+                return x == expected_int
+
             text = f"value == {expected_int}"
         else:
             text = inspect.getsource(expected)
