@@ -325,6 +325,13 @@ GoogleSheetsDataSource(
     "https://docs.google.com/spreadsheets/d/18ZgGqDZs0LoCW13LsN860AN5VGuVezCXaYsMSYnzeZ4/edit?usp=sharing",
 )
 
+GoogleSheetsDataSource(
+    "construction_dating_missed_adjacents_v2.csv",
+    "Missed adjacent construction dating annotations",
+    "CSV with columns: processing date, annotator, cafo id, cafo uuid, latitude, longitude, lat/lon,...",
+    "https://docs.google.com/spreadsheets/d/1cCbcXK2iKg-gLn3pxQawTFqIq5niKUhauLz2v4KfLFg/edit?usp=sharing",
+)
+
 
 GoogleSheetsDataSource(
     "permits_parcels.csv",

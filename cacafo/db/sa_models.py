@@ -324,6 +324,7 @@ class CafoAnnotation(PublicBase):
     is_cafo: Mapped[bool]
     is_afo: Mapped[bool]
     location: Mapped[Geography] = mapped_column(Geography("POINT", srid=DEFAULT_SRID))
+    annotation_facility_hash: Mapped[str] = mapped_column(sa.String, nullable=True)
     annotated_on: Mapped[datetime] = mapped_column(sa.DateTime)
     annotated_by: Mapped[str] = mapped_column(sa.String, nullable=True)
 

@@ -1,6 +1,7 @@
-import csv, os
+import csv
 import datetime
 import json
+import os
 import typing as t
 from dataclasses import dataclass
 
@@ -424,7 +425,9 @@ def animal_type_annotation(session, file_path=None):
 
 
 @ingestor(m.CafoAnnotation)
-def cafo_annotation(session):
+def cafo_annotation(session, file_path=None):
+    if file_path:
+        raise ValueError("file_path is not supported for cafo_annotation")
     # first ingest from animal typing, then from construction
     with open(cacafo.data.source.get("animal_typing.csv")) as f:
         animal_typing = list(csv.DictReader(f))
@@ -448,6 +451,7 @@ def cafo_annotation(session):
                     annotated_on=datetime.datetime.fromisoformat(
                         line["annotated_before"]
                     ),
+                    annotation_facility_hash=line.get("uuid"),
                     annotated_by=line["labeler"],
                     is_cafo=is_cafo,
                     is_afo=is_afo,
@@ -470,6 +474,7 @@ def cafo_annotation(session):
                     annotated_on=datetime.datetime.strptime(
                         line["processed_on"], "%m/%d/%Y"
                     ),
+                    annotation_facility_hash=line.get("uuid"),
                     is_cafo=True,
                     is_afo=True,
                     annotated_by=line["annotator"],
@@ -559,19 +564,24 @@ def urban_mask(session, file_path=None):
         )
     session.commit()
 
+
 @ingestor(m.IrrAnnotation, depends_on=[m.Image])
 def irr_annotation(session, file_path=None):
-    file_path = file_path or get_data_path('source/ca_irr')
+    file_path = file_path or get_data_path("source/ca_irr")
     annotations = []
     for fn in os.listdir(file_path):
-        if os.path.splitext(fn)[-1] != '.jsonl':
+        if os.path.splitext(fn)[-1] != ".jsonl":
             continue
         path = os.path.join(file_path, fn)
-        annotator = fn.split('_')[0] #first part of the file name should be annotator name
+        annotator = fn.split("_")[
+            0
+        ]  # first part of the file name should be annotator name
         with open(path) as f:
             image_name_to_id = {
                 name: id
-                for name, id in session.execute(sa.select(m.Image.name, m.Image.id)).all()
+                for name, id in session.execute(
+                    sa.select(m.Image.name, m.Image.id)
+                ).all()
             }
             lines = [json.loads(line.strip()) for line in f.readlines() if line.strip()]
             for line in rich.progress.track(
@@ -580,13 +590,16 @@ def irr_annotation(session, file_path=None):
                 filename = _dig(line, "filename") or _dig(line, "name")
                 if filename is None:
                     continue
-                image = (image_name_to_id[filename.split("/")[-1].replace(".jpeg", "")],)
+                image = (
+                    image_name_to_id[filename.split("/")[-1].replace(".jpeg", "")],
+                )
                 annotations.append(
                     {
                         "annotator": annotator,
                         "data": line,
                         "annotated_at": datetime.datetime.fromisoformat(
-                            _dig(line, "annotations", 0, "createdAt") or line["createdAt"]
+                            _dig(line, "annotations", 0, "createdAt")
+                            or line["createdAt"]
                         ),
                         "image_id": image[0],
                     }
@@ -605,6 +618,7 @@ def irr_annotation(session, file_path=None):
         ),
         annotations,
     )
+
 
 def status():
     session = get_sqlalchemy_session()

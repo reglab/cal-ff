@@ -187,7 +187,9 @@ def join_permits(session=None):
     )
 
 
-def join_annotations(session, annotation_model, location_column="location"):
+def join_annotations(
+    session, annotation_model, location_column="location", facility_hash_function=None
+):
     session.execute(sa.update(annotation_model).values(facility_id=None))
     annotations = (
         session.execute(
@@ -200,6 +202,17 @@ def join_annotations(session, annotation_model, location_column="location"):
         session.execute(sa.select(m.Facility).where(m.Facility.archived_at.is_(None)))
         .scalars()
         .all()
+    )
+
+    hash_map = {f.hash: f for f in facilities}
+    if facility_hash_function:
+        for annotation in annotations:
+            if facility_hash_function(annotation) in hash_map:
+                annotation.facility_id = hash_map[facility_hash_function(annotation)].id
+
+    click.secho(
+        f"Joined {len([annotation for annotation in annotations if annotation.facility_id is not None])} {annotation_model.__name__} to facilities by uuid",
+        fg="green",
     )
 
     facility_geoms = [
@@ -217,7 +230,8 @@ def join_annotations(session, annotation_model, location_column="location"):
     for annotation_idx, facility_idx in zip(annotation_idxs, facility_idxs):
         annotation = annotations[annotation_idx]
         facility = facilities[facility_idx]
-        annotation.facility_id = facility.id
+        if not annotation.facility_id:
+            annotation.facility_id = facility.id
     to_update = [
         annotation for annotation in annotations if annotation.facility_id is not None
     ]
@@ -254,19 +268,33 @@ def join_annotations(session, annotation_model, location_column="location"):
     session.commit()
 
 
-def join_cafo_annotations(session):
-    join_annotations(session, m.CafoAnnotation)
+def join_cafo_annotations(session=None):
+    session = session or get_sqlalchemy_session()
+    join_annotations(
+        session,
+        m.CafoAnnotation,
+        location_column="location",
+        facility_hash_function=lambda a: a.annotation_facility_hash,
+    )
 
 
-def join_animal_type_annotations(session):
-    join_annotations(session, m.AnimalTypeAnnotation)
+def join_animal_type_annotations(session=None):
+    session = session or get_sqlalchemy_session()
+    join_annotations(session, m.AnimalTypeAnnotation, location_column="location")
 
 
-def join_construction_annotations(session):
-    join_annotations(session, m.ConstructionAnnotation)
+def join_construction_annotations(session=None):
+    session = session or get_sqlalchemy_session()
+    join_annotations(
+        session,
+        m.ConstructionAnnotation,
+        location_column="location",
+        facility_hash_function=lambda a: a.data["cafo_uuid"],
+    )
 
 
-def join_facility_counties(session):
+def join_facility_counties(session=None):
+    session = session or get_sqlalchemy_session()
     facility_counties = session.execute(
         sa.select(m.Facility, m.Parcel.county_id)
         .join(m.Building, m.Facility.id == m.Building.facility_id)
@@ -317,9 +345,25 @@ def create_facilities_cli():
 
 
 @_cli.command("join", help="Join annotations to facilities")
-def join_facilities_cli():
-    join_facilities()
-    click.echo("Joined annotations to facilities.")
+@click.option(
+    "--type",
+    type=click.Choice(["all", "cafo", "animal_type", "construction"]),
+    default="all",
+    help="Type(s) of annotation to join",
+)
+def join_facilities_cli(type: str):
+    match type:
+        case "all":
+            join_facilities()
+        case "cafo":
+            join_cafo_annotations()
+        case "animal_type":
+            join_animal_type_annotations()
+        case "construction":
+            join_construction_annotations()
+        case _:
+            raise ValueError(f"Invalid type: {type}")
+    click.echo(f"Joined {type} annotations to facilities")
 
 
 @_cli.command("archive", help="Archive facilities")
