@@ -475,8 +475,8 @@ def cafo_annotation(session, file_path=None):
                         line["processed_on"], "%m/%d/%Y"
                     ),
                     annotation_facility_hash=line.get("uuid"),
-                    is_cafo=True,
-                    is_afo=True,
+                    is_cafo=line.get("is_cafo").lower() == "true",
+                    is_afo=line.get("is_cafo").lower() == "true",
                     annotated_by=line["annotator"],
                 )
             )
