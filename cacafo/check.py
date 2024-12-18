@@ -132,10 +132,11 @@ def check(expected=None):
 
 
 @check(expected=0)
-def facilities_with_overlapping_bounding_boxes(verbose=False):
+def cafos_with_overlapping_bounding_boxes(verbose=False):
     session = get_sqlalchemy_session()
+    cafo_query = cacafo.query.cafos().subquery()
     query = sa.select(m.Facility.id, m.Facility.geometry).where(
-        m.Facility.archived_at.is_(None)
+        m.Facility.archived_at.is_(None) & m.Facility.id.in_(sa.select(cafo_query.c.id))
     )
     facilities = session.execute(query).all()
 
@@ -158,7 +159,7 @@ def facilities_with_overlapping_bounding_boxes(verbose=False):
     return len(results)
 
 
-@check(expected=0)
+@check()
 def overlapping_parcels(verbose=False):
     session = get_sqlalchemy_session()
     query = sa.select(
@@ -189,7 +190,7 @@ def overlapping_parcels(verbose=False):
     return len(intersections)
 
 
-@check(expected=0)
+@check()
 def unmatched_cafo_annotations(verbose=False):
     session = get_sqlalchemy_session()
     query = sa.select(m.CafoAnnotation.id).where(m.CafoAnnotation.facility_id.is_(None))
@@ -202,7 +203,7 @@ def unmatched_cafo_annotations(verbose=False):
     return len(results)
 
 
-@check(expected=0)
+@check()
 def unmatched_animal_type_annotations(verbose=False):
     session = get_sqlalchemy_session()
     query = sa.select(m.AnimalTypeAnnotation.id).where(
@@ -217,7 +218,7 @@ def unmatched_animal_type_annotations(verbose=False):
     return len(results)
 
 
-@check(expected=0)
+@check()
 def unmatched_construction_annotations(verbose=False):
     session = get_sqlalchemy_session()
     query = sa.select(m.ConstructionAnnotation.id).where(
@@ -269,7 +270,6 @@ def cafos_with_no_construction_annotations(verbose=False):
     results = list(session.execute(query).scalars().unique().all())
     nca = []
     for facility in results:
-        # if facility.is_cafo and not facility.all_construction_annotations:
         if facility.is_cafo and not facility.all_construction_annotations:
             if verbose:
                 rich.print(
@@ -279,7 +279,7 @@ def cafos_with_no_construction_annotations(verbose=False):
     return len(nca)
 
 
-@check(expected=0)
+@check()
 def cafos_with_multiple_construction_annotations(verbose=False):
     session = get_sqlalchemy_session()
     cafos = cacafo.query.cafos().subquery()
@@ -328,7 +328,7 @@ def cafos_with_no_animal_type(verbose=False):
                 rich.print(
                     f"[yellow]Facility {facility.id} has no AnimalTypeAnnotations[/yellow]"
                 )
-    return len([f for f in facilities if not f.animal_types])
+    return len([f for f in facilities if f.is_cafo and not f.animal_types])
 
 
 @check(expected=lambda value: value > 2200 and value < 2500)
@@ -563,10 +563,12 @@ def _cli(verbose, check):
                 return x == expected_int
 
             text = f"value == {expected_int}"
-        else:
+        elif expected is not None:
             text = inspect.getsource(expected)
             text = text.split("\n")[0].split(":")[1].strip("() ")
-        if expected is not None and not expected(result):
+        if expected is None:
+            rich.print(f"[[blue]Info[/blue]] {name}: {result}")
+        elif not expected(result):
             rich.print(f"[[red]Failure[/red]] {name}: expected {text} but got {result}")
         else:
             rich.print(f"[[green]OK[/green]] {name}: {result}")

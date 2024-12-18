@@ -635,9 +635,7 @@ class Facility(PublicBase):
 
     @property
     def is_cafo(self):
-        return not any(
-            [not annotation.is_cafo for annotation in self.all_cafo_annotations]
-        )
+        return all([annotation.is_cafo for annotation in self.all_cafo_annotations])
 
     @property
     def is_afo(self):

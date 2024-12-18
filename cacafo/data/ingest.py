@@ -417,7 +417,7 @@ def animal_type_annotation(session, file_path=None):
                             line["annotated_before"]
                         ),
                         annotated_by=line["labeler"],
-                        notes=line["notes"],
+                        notes=line["notes"] or "",
                     )
                 )
         session.add_all(animal_types)
