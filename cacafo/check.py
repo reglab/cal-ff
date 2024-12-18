@@ -280,6 +280,28 @@ def cafos_with_no_construction_annotations(verbose=False):
 
 
 @check(expected=0)
+def cafos_with_multiple_construction_annotations(verbose=False):
+    session = get_sqlalchemy_session()
+    cafos = cacafo.query.cafos().subquery()
+    query = (
+        sa.select(cafos.c.id)
+        .join(
+            m.ConstructionAnnotation,
+            cafos.c.id == m.ConstructionAnnotation.facility_id,
+        )
+        .group_by(cafos.c.id)
+        .having(sa.func.count(m.ConstructionAnnotation.id) > 1)
+    )
+    results = list(session.execute(query).all())
+    for result in results:
+        if verbose:
+            rich.print(
+                f"[yellow]Facility {result[0]} has multiple ConstructionAnnotations[/yellow]"
+            )
+    return len(results)
+
+
+@check(expected=0)
 def cafos_with_no_animal_type(verbose=False):
     session = get_sqlalchemy_session()
     facilities = (
