@@ -176,3 +176,15 @@ def unlabeled_adjacent_images(images_query):
         .join(m.ImageAnnotation, isouter=True)
         .where(m.ImageAnnotation.id.is_(None))
     )
+
+
+def unlabeled_images():
+    return (
+        sa.select(m.Image)
+        .join(m.ImageAnnotation, isouter=True)
+        .where(m.ImageAnnotation.id.is_(None) & m.Image.bucket.is_not(None))
+    )
+
+
+def labeled_images():
+    return sa.select(m.Image).join(m.ImageAnnotation)

@@ -9,8 +9,8 @@ from scipy.stats import f
 from statsmodels.stats.proportion import proportion_confint
 
 import cacafo.db.sa_models as m
+import cacafo.query
 from cacafo.db.session import get_sqlalchemy_session
-from cacafo.query import positive_images
 
 BOOTSTRAP_ITERATIONS = None
 
@@ -39,33 +39,65 @@ def bootstrap_recall(strata_df):
 
 def db_strata_counts():
     session = get_sqlalchemy_session()
-    subquery = positive_images().subquery()
-    query = (
-        session.execute(
-            sa.select(m.Image, m.Image.id.in_(sa.select(subquery.c.id))).options(
-                sa.orm.selectinload(m.Image.annotations),
-                sa.orm.selectinload(m.Image.county),
-            )
+
+    all_image_id_strata = session.execute(
+        sa.select(
+            m.Image.__table__.c.id,
+            m.County.__table__.c.name,
+            m.Image.__table__.c.bucket,
         )
-        .unique()
-        .all()
+        .select_from(m.Image)
+        .join(m.County)
+        .filter(m.Image.bucket.is_not(None))
+    ).all()
+
+    initially_labeled_image_ids = set(
+        session.scalars(cacafo.query.initially_labeled_images()).all()
     )
-    data = []
-    for im, pos in query:
-        data.append(
-            {"stratum": im.stratum, "positive": pos, "label_status": im.label_status}
-        )
-    df = pd.DataFrame(data)
-    df = (
-        df.groupby("stratum")
-        .agg(
-            unlabeled=("label_status", lambda x: sum(x == "unlabeled")),
-            labeled=("label_status", lambda x: sum(~x.isin(["unlabeled", "removed"]))),
-            positive=("positive", "sum"),
-        )
-        .reset_index()
+    labeled_image_subquery = cacafo.query.labeled_images().subquery()
+    labeled_image_ids = set(
+        session.scalars(
+            sa.select(labeled_image_subquery.c.id).select_from(labeled_image_subquery)
+        ).all()
+    )
+    unlabeled_image_subquery = cacafo.query.unlabeled_images().subquery()
+    unlabeled_image_ids = set(
+        session.scalars(
+            sa.select(unlabeled_image_subquery.c.id).select_from(
+                unlabeled_image_subquery
+            )
+        ).all()
+    )
+    positive_image_subquery = cacafo.query.positive_images().subquery()
+    positive_image_ids = set(
+        session.scalars(
+            sa.select(positive_image_subquery.c.id).select_from(positive_image_subquery)
+        ).all()
     )
 
+    assert labeled_image_ids & unlabeled_image_ids == set()
+    assert positive_image_ids & unlabeled_image_ids == set()
+    assert len(labeled_image_ids | unlabeled_image_ids) == len(all_image_id_strata)
+
+    data = {}
+    for image_id, county, bucket in all_image_id_strata:
+        strata = f"{county}:{bucket}"
+        if image_id in initially_labeled_image_ids:
+            strata = "completed"
+        if not data.get(strata):
+            data[strata] = {
+                "stratum": strata,
+                "unlabeled": 0,
+                "labeled": 0,
+                "positive": 0,
+            }
+        if image_id in labeled_image_ids:
+            data[strata]["labeled"] += 1
+        else:
+            data[strata]["unlabeled"] += 1
+        if image_id in positive_image_ids:
+            data[strata]["positive"] += 1
+    df = pd.DataFrame(data.values())
     return df
 
 
