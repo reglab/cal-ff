@@ -54,6 +54,11 @@ def db_strata_counts():
     initially_labeled_image_ids = set(
         session.scalars(cacafo.query.initially_labeled_images()).all()
     )
+    post_hoc_image_ids = set(
+        session.scalars(
+            sa.select(m.Image.id).where(m.Image.label_reason == "post_hoc")
+        ).all()
+    )
     labeled_image_subquery = cacafo.query.labeled_images().subquery()
     labeled_image_ids = set(
         session.scalars(
@@ -84,6 +89,8 @@ def db_strata_counts():
         strata = f"{county}:{bucket}"
         if image_id in initially_labeled_image_ids:
             strata = "completed"
+        elif image_id in post_hoc_image_ids:
+            strata = "post hoc"
         if not data.get(strata):
             data[strata] = {
                 "stratum": strata,
