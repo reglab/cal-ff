@@ -43,11 +43,12 @@ def db_strata_counts():
     all_image_id_strata = session.execute(
         sa.select(
             m.Image.__table__.c.id,
-            m.County.__table__.c.name,
+            m.CountyGroup.__table__.c.name,
             m.Image.__table__.c.bucket,
         )
         .select_from(m.Image)
         .join(m.County)
+        .join(m.CountyGroup)
         .filter(m.Image.bucket.is_not(None))
     ).all()
 
@@ -85,8 +86,8 @@ def db_strata_counts():
     assert len(labeled_image_ids | unlabeled_image_ids) == len(all_image_id_strata)
 
     data = {}
-    for image_id, county, bucket in all_image_id_strata:
-        strata = f"{county}:{bucket}"
+    for image_id, county_group, bucket in all_image_id_strata:
+        strata = f"{county_group}:{bucket}"
         if image_id in initially_labeled_image_ids:
             strata = "completed"
         elif image_id in post_hoc_image_ids:
