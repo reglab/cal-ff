@@ -472,19 +472,18 @@ def total_facilities(session):
 
 
 @constant_method
-def high_likelihood_labeled(session):
-    imgs = images(session)
-    return "{:,}".format(sum([x.stratum == "completed" for (x,) in imgs]))
-
-
-@constant_method
 def pct_image_labeled(session):
-    imgs = images(session)
-    labeled_count = sum([x.label_status != "unlabeled" for (x,) in imgs])
-    total_images = (
-        session.execute(sa.select(sa.func.count(m.Image.id)).select_from(m.Image))
+    labeled_count = (
+        session.execute(
+            sa.select(sa.func.count()).select_from(
+                cacafo.query.labeled_images().subquery()
+            )
+        )
         .scalars()
         .one()
+    )
+    total_images = (
+        session.execute(sa.select(sa.func.count()).select_from(m.Image)).scalars().one()
     )
     return "{:.2f}\%".format(100 * labeled_count / total_images)
 
