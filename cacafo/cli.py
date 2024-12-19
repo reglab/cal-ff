@@ -2,6 +2,7 @@ import logging
 import subprocess
 import sys
 import traceback
+from pathlib import Path
 
 import ipdb
 import rich_click as click
@@ -105,12 +106,20 @@ def tunnel():
     )
 
 
-@cli.command()
+@cli.command(help="Open visidata view of the postgres db with the env settings")
 def vd():
+    import sys
+
     from cacafo.db.session import get_postgres_uri
 
     visidata_postgres_uri = get_postgres_uri().replace("postgresql", "postgres")
-    subprocess.run(["vd", visidata_postgres_uri])
+    binary = Path(sys.executable)
+    binary = binary.parent / "vd"
+    if not binary.exists():
+        raise FileNotFoundError(
+            f"Could not find visidata binary at {binary}; make sure project is installed with dev dependencies."
+        )
+    subprocess.run([str(binary), visidata_postgres_uri], check=True)
 
 
 # ruff: noqa: F401, F841
@@ -229,6 +238,7 @@ from cacafo.export import _cli as export_cli
 from cacafo.facilities import _cli as facilities_cli
 from cacafo.naip import _cli as naip_cli
 from cacafo.paper.constants import _cli as constant_cli
+from cacafo.urban_mask import _cli as urban_mask_cli
 
 cli.add_command(check_cli)
 cli.add_command(export_cli)
@@ -238,6 +248,7 @@ cli.add_command(join_cli)
 cli.add_command(facilities_cli)
 cli.add_command(building_relationships_cli)
 cli.add_command(constant_cli)
+cli.add_command(urban_mask_cli)
 
 if __name__ == "__main__":
     cli()

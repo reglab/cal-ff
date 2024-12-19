@@ -493,12 +493,10 @@ def unremoved_images_within_urban_mask(verbose=False):
 def positive_images_within_urban_mask(verbose=False):
     session = new_session()
     urban_mask = session.execute(sa.select(m.UrbanMask)).scalars().all()
+    subquery = cacafo.query.positive_images()
     positive_images = (
         session.execute(
-            sa.select(m.Image)
-            .join(m.ImageAnnotation)
-            .join(m.Building)
-            .where(m.Image.bucket.is_not(None))
+            sa.select(m.Image).where(m.Image.id.in_(sa.select(subquery.c.id)))
         )
         .unique()
         .scalars()
