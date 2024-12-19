@@ -316,22 +316,28 @@ def fac_to_im_ratio(session):
 
 @constant_method
 def completeness_est(session):
-    # this is images population, not number of facilities
-    pop_est = population_est().point
-    # convert to n_facilities
-    pop_est = pop_est / float(fac_to_im_ratio(session))
-    observed = len(cafos(session))
-    return "{:.2f}\%".format(100 * observed / pop_est)
+    survey = img_survey()
+    # this est is images population, not number of facilities
+    pop_est = survey.population().point
+    unseen_images_est = pop_est - survey.positive()
+    unseen_facilities_est = unseen_images_est / float(fac_to_im_ratio(session))
+    observed_facilities = len(cafos(session))
+    return r"{:.2f}\%".format(
+        100 * observed_facilities / (observed_facilities + unseen_facilities_est)
+    )
 
 
 @constant_method
 def completeness_lower(session):
-    # this is images population, not number of facilities
-    pop_upper = population_est().upper
-    # convert to n_facilities
-    pop_upper = pop_upper / float(fac_to_im_ratio(session))
-    observed = len(cafos(session))
-    return "{:.2f}\%".format(100 * observed / pop_upper)
+    survey = img_survey()
+    # this est is images population, not number of facilities
+    pop_est = survey.population().upper
+    unseen_images_est = pop_est - survey.positive()
+    unseen_facilities_est = unseen_images_est / float(fac_to_im_ratio(session))
+    observed_facilities = len(cafos(session))
+    return r"{:.2f}\%".format(
+        100 * observed_facilities / (observed_facilities + unseen_facilities_est)
+    )
 
 
 @constant_method
@@ -438,11 +444,11 @@ def total_labeled(session):
 
 
 @constant_method
-def pct_labeled(session):
+def pct_ca_labeled(session):
     survey = img_survey()
     labeled = sum([stratum.labeled for stratum in survey.strata])
     area_of_CA = 481000
-    return "{:.3f}\%".format(100 * labeled / area_of_CA)
+    return r"{:.3f}\%".format(100 * labeled / area_of_CA)
 
 
 @constant_method
@@ -473,19 +479,20 @@ def total_facilities(session):
 
 @constant_method
 def pct_image_labeled(session):
-    labeled_count = (
+    subquery = cacafo.query.labeled_images().subquery()
+    labeled = (
+        session.execute(sa.select(sa.func.count(subquery.c.id)).select_from(subquery))
+        .scalars()
+        .one()
+    )
+    total = (
         session.execute(
-            sa.select(sa.func.count()).select_from(
-                cacafo.query.labeled_images().subquery()
-            )
+            sa.select(sa.func.count(m.Image.id)).where(m.Image.bucket.is_not(None))
         )
         .scalars()
         .one()
     )
-    total_images = (
-        session.execute(sa.select(sa.func.count()).select_from(m.Image)).scalars().one()
-    )
-    return "{:.2f}\%".format(100 * labeled_count / total_images)
+    return r"{:.2f}\%".format(100 * labeled / total)
 
 
 @constant_method
@@ -493,7 +500,7 @@ def irr(session):
     return "{:.2f}".format(cacafo.stats.irr.label_balanced_cohens_kappa(session))
 
 
-@click.command("constants")
+@click.command("constants", help="Write all paper constants to file.")
 def _cli():
     """Write all variables to file."""
     with open(rl.utils.io.get_data_path("paper", "constants.tex"), "w") as f:
