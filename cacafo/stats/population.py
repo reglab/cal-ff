@@ -377,7 +377,7 @@ class Survey:
         new.label(n=n, positives=positives, method=method)
         return new
 
-    def population(self, method: str = "per_stratum") -> Estimate:
+    def population(self, method: str = "f_estimator") -> Estimate:
         match method:
             case "per_stratum":
                 return stratum_sum_estimator(self)
@@ -385,8 +385,10 @@ class Survey:
                 return aggregate_estimator(self)
             case "horvitz-thompson":
                 return horvitz_thompson_estimator(self)
+            case "f_estimator":
+                return naip_stratum_f_estimator(self)
 
-    def completeness(self, method: str = "per_stratum") -> Estimate:
+    def completeness(self, method: str = "f_estimator") -> Estimate:
         strata_positives = np.array([stratum.positive for stratum in self.strata])
         total_positives = np.sum(strata_positives) + self.post_hoc_positive
         est = self.population(method=method)
