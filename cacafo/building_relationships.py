@@ -6,7 +6,7 @@ import shapely as shp
 import sqlalchemy as sa
 
 import cacafo.data.source
-import cacafo.db.sa_models as m
+import cacafo.db.models as m
 import cacafo.owner_name_matching
 from cacafo.db.session import get_sqlalchemy_session
 from cacafo.transform import CA_SRID

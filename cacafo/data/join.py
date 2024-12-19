@@ -8,7 +8,7 @@ import sqlalchemy as sa
 import sqlalchemy.orm as orm
 from rich.traceback import install
 
-import cacafo.db.sa_models as m
+import cacafo.db.models as m
 from cacafo.db.session import get_sqlalchemy_session
 
 install(show_locals=True)

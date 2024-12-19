@@ -1,6 +1,6 @@
 import sqlalchemy as sa
 
-import cacafo.db.sa_models as m
+import cacafo.db.models as m
 
 
 def cafos():

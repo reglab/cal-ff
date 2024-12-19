@@ -6,7 +6,7 @@ import rl
 import sklearn.metrics as metrics
 import sqlalchemy as sa
 
-import cacafo.db.sa_models as m
+import cacafo.db.models as m
 import cacafo.query as query
 from cacafo.db.session import get_sqlalchemy_session
 

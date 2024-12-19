@@ -8,7 +8,7 @@ import sqlalchemy as sa
 from scipy.stats import f
 from statsmodels.stats.proportion import proportion_confint
 
-import cacafo.db.sa_models as m
+import cacafo.db.models as m
 import cacafo.query
 from cacafo.db.session import get_sqlalchemy_session
 

@@ -135,7 +135,7 @@ def shell():
     from rich import print
     from sqlalchemy.dialects.postgresql import JSON
 
-    import cacafo.db.sa_models as models
+    import cacafo.db.models as models
     import cacafo.query
     from cacafo.db.session import get_sqlalchemy_session as get_session
     from cacafo.transform import to_meters, to_wgs
@@ -176,7 +176,7 @@ def whereis(table_name, id, column):
     from geoalchemy2.shape import to_shape
     from sqlalchemy import select
 
-    from cacafo.db.sa_models import get_model_by_table_name
+    from cacafo.db.models import get_model_by_table_name
     from cacafo.db.session import get_sqlalchemy_session as get_session
 
     session = get_session()

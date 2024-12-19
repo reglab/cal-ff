@@ -7,7 +7,7 @@ import shapely as shp
 import shapely.ops
 import sqlalchemy as sa
 
-import cacafo.db.sa_models as m
+import cacafo.db.models as m
 from cacafo.cluster.buildings import building_clusters
 from cacafo.db.session import get_sqlalchemy_session
 from cacafo.transform import to_meters

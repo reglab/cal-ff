@@ -5,7 +5,7 @@ import sqlalchemy as sa
 from sklearn.feature_extraction.text import TfidfVectorizer
 from thefuzz import fuzz
 
-import cacafo.db.sa_models as m
+import cacafo.db.models as m
 from cacafo.db.session import get_sqlalchemy_session
 
 FUZZY_MATCH_WORDS_TO_REMOVE = [

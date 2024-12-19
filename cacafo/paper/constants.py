@@ -5,7 +5,7 @@ import rl.utils.io
 import shapely as shp
 import sqlalchemy as sa
 
-import cacafo.db.sa_models as m
+import cacafo.db.models as m
 import cacafo.query
 import cacafo.stats
 import cacafo.stats.irr

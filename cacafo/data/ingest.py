@@ -16,7 +16,7 @@ from rl.utils.io import get_data_path
 from sqlalchemy.dialects import postgresql
 
 import cacafo.data.source
-import cacafo.db.sa_models as m
+import cacafo.db.models as m
 import cacafo.owner_name_matching
 import cacafo.transform
 from cacafo.db.session import get_sqlalchemy_session

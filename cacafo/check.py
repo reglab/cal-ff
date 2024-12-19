@@ -7,7 +7,7 @@ import rich_click as click
 import sqlalchemy as sa
 from shapely import STRtree
 
-import cacafo.db.sa_models as m
+import cacafo.db.models as m
 import cacafo.query
 from cacafo.db.session import get_sqlalchemy_session
 from cacafo.transform import to_meters

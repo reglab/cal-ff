@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.orm import Session
 from tqdm import tqdm
 
-import cacafo.db.sa_models as m
+import cacafo.db.models as m
 import cacafo.query
 
 EXPORTERS = {}

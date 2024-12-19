@@ -3,7 +3,7 @@ import pathlib
 import networkx as nx
 import sqlalchemy as sa
 
-from cacafo.db.sa_models import Building
+from cacafo.db.models import Building
 from cacafo.db.session import get_sqlalchemy_session
 
 BUILDING_THRESHOLD_RELATIONSHIP_QUERY_PATH = (
