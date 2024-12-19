@@ -293,6 +293,18 @@ def image(session, file_path=None):
                 session.flush()
                 images = []
         session.add_all(images)
+    path = cacafo.data.source.get("post_hoc.csv")
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"File {path} not found, post hoc data required.")
+    with open(path) as f:
+        reader = csv.DictReader(f)
+        names = {line["image_name"] for line in reader}
+        # update label_reason to be post hoc for these images
+        session.execute(
+            sa.update(m.Image)
+            .where(m.Image.name.in_(names))
+            .values(label_reason="post_hoc")
+        )
 
 
 def _dig(d: t.Sequence, *keys: list[t.Any]) -> t.Any:

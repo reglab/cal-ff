@@ -212,7 +212,27 @@ class Image(PublicBase):
 
     @property
     def stratum(self):
-        return (self.model_score, self.county.county_group.name)
+        if self.bucket is None:
+            return None
+
+        completed_buckets = ["1.25", "1.75", "3", "inf", "ex ante permit"]
+        if self.bucket in completed_buckets:
+            return "completed"
+
+        if not hasattr(Image, "_INIT_IMAGES"):
+            from cacafo.query import initially_labeled_images
+
+            session = sa.orm.object_session(self)
+            initial_images = session.execute(initially_labeled_images()).all()
+            initial_images = {image.id for image in initial_images}
+            Image._INIT_IMAGES = initial_images
+        else:
+            initial_images = Image._INIT_IMAGES
+
+        if self.id in initial_images:
+            return "completed"
+
+        return f"{self.bucket}:{self.county.county_group.name}"
 
     @property
     def is_positive(self):

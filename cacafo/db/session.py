@@ -2,8 +2,8 @@ from urllib.parse import quote_plus
 
 import rl.utils.io
 import sqlalchemy as sa
-from sqlalchemy.orm import sessionmaker
 from playhouse.postgres_ext import PostgresqlExtDatabase
+from sqlalchemy.orm import sessionmaker
 
 
 def get_postgres_uri(
@@ -50,7 +50,7 @@ def get_sqlalchemy_engine(
     Get a SQLAlchemy engine object for the Postgres database.
     kwargs are passed to get_postgres_uri.
     """
-    return sa.create_engine(get_postgres_uri(**kwargs), echo=False)
+    return sa.create_engine(get_postgres_uri(**kwargs), echo=False, pool_pre_ping=True)
 
 
 def get_sqlalchemy_session(

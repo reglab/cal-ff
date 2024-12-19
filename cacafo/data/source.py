@@ -480,10 +480,16 @@ GoogleDriveDataSource(
     "https://drive.google.com/file/d/1k8iLIGzpFPDI5O5I5sGnEYKlhdpJODN1/view?usp=sharing",
 )
 
-
 GoogleDriveDataSource(
     "parcel_name_annotations.csv",
     "Parcel name annotations",
     "CSV with columns: owner_1, owner_2, create_override_match, annotated_on, annotated_by",
     "https://drive.google.com/file/d/19nsLOzs4LKhbjhGcnEvseUrn86MgdYHf/view?usp=sharing",
+)
+
+GoogleDriveDataSource(
+    "post_hoc.csv",
+    "Post hoc data",
+    "CSV with column: image_name",
+    "https://drive.google.com/file/d/17W_dp5KsukBE9cx0L5kuBhAm-rzWrdti/view?usp=drive_link",
 )
