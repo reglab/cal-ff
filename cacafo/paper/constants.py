@@ -173,6 +173,7 @@ def facilities_with_no_best_permit(verbose=False):
     return "{:,}".format(no_best_permits)
 
 
+@constant_method
 def facilities_with_best_permit(verbose=False):
     session = new_session()
     facilities = cafos(session)
