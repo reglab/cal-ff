@@ -187,4 +187,4 @@ def unlabeled_images():
 
 
 def labeled_images():
-    return sa.select(m.Image).join(m.ImageAnnotation)
+    return sa.select(m.Image).join(m.ImageAnnotation).where(m.Image.bucket.is_not(None))

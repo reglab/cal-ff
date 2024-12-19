@@ -9,6 +9,7 @@ from shapely import STRtree
 
 import cacafo.db.models as m
 import cacafo.query
+import cacafo.stats.population
 from cacafo.db.session import new_session
 from cacafo.transform import to_meters
 
@@ -530,6 +531,18 @@ def all_building_relationship_types_present(verbose=False):
     query = sa.select(m.BuildingRelationship.reason).distinct()
     results = session.execute(query).scalars().all()
     return set(results)
+
+
+@check(expected=lambda x: x > 0.9)
+def completeness_estimate(verbose=False):
+    survey = cacafo.stats.population.Survey.from_db()
+    return survey.completeness().point
+
+
+@check(expected=lambda x: x > 0.8)
+def completeness_lower_bound(verbose=False):
+    survey = cacafo.stats.population.Survey.from_db()
+    return survey.completeness().lower
 
 
 @click.command("check", help="Run data validation checks.")

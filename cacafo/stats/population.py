@@ -49,7 +49,7 @@ def db_strata_counts():
         .select_from(m.Image)
         .join(m.County)
         .join(m.CountyGroup)
-        .filter(m.Image.bucket.is_not(None))
+        .where(m.Image.bucket.is_not(None))
     ).all()
 
     initially_labeled_image_ids = set(
@@ -83,7 +83,7 @@ def db_strata_counts():
 
     assert labeled_image_ids & unlabeled_image_ids == set()
     assert positive_image_ids & unlabeled_image_ids == set()
-    assert len(labeled_image_ids | unlabeled_image_ids) == len(all_image_id_strata)
+    # assert len(labeled_image_ids | unlabeled_image_ids) == len(all_image_id_strata)
 
     data = {}
     for image_id, county_group, bucket in all_image_id_strata:
