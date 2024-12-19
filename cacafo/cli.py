@@ -58,7 +58,7 @@ def cli(log_level, debug, rich_traceback, echo_queries):
     LOGGER.setLevel(logging.getLevelName(log_level))
 
 
-@cli.command()
+@cli.command(help="Open a pgcli shell to the postgres db")
 def sql():
     import subprocess
 
@@ -67,7 +67,7 @@ def sql():
     subprocess.run(["pgcli", get_postgres_uri()], check=True)
 
 
-@cli.command()
+@cli.command(help="Open a tunnel to the LCR postgres db")
 def tunnel():
     import subprocess
 
@@ -123,7 +123,7 @@ def vd():
 
 
 # ruff: noqa: F401, F841
-@cli.command()
+@cli.command(help="Open an ipython shell with helpful project imports")
 def shell():
     import hashlib
     from datetime import datetime
@@ -171,7 +171,7 @@ def shell():
     start_ipython(argv=[], user_ns=locals())
 
 
-@cli.command()
+@cli.command(help="Print the location of any object in the database")
 @click.argument("table_name")
 @click.argument("id", type=int, required=False, default=None)
 @click.option(
