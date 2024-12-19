@@ -620,7 +620,9 @@ def number_of_images_per_facility():
     from cacafo.query import cafos, positive_images
 
     subquery = positive_images().subquery()
-    total_positive_images = sa.select(sa.func.count()).select_from(subquery)
+    total_positive_images = (
+        sa.select(sa.func.count()).select_from(subquery).scalar_subquery()
+    )
     total_facilities = (
         sa.select(sa.func.count()).select_from(cafos().subquery()).scalar_subquery()
     )
