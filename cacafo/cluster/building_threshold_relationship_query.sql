@@ -11,7 +11,7 @@ WITH "buildingthresholdrelationship" AS (
 			WHERE (
 				("building_relationship"."reason" = 'tfidf')
 				AND ("building_relationship"."weight" > 300)
-				AND ("building_relationship"."weight" < 1000)
+				AND ("building_relationship"."weight" <= 1000)
 			)
 		) AS "parcelnamerelationship" ON (
 			("parcelnamerelationship"."building_id" = "distancerelationship"."building_id")
@@ -25,7 +25,7 @@ WITH "buildingthresholdrelationship" AS (
 			WHERE (
 				("building_relationship"."reason" = 'fuzzy')
 				AND ("building_relationship"."weight" > 0)
-				AND ("building_relationship"."weight" < 1000)
+				AND ("building_relationship"."weight" <= 1000)
 			)
 		) AS "parcelfuzzyrelationship" ON (
 			("parcelfuzzyrelationship"."building_id" = "distancerelationship"."building_id")
@@ -33,7 +33,7 @@ WITH "buildingthresholdrelationship" AS (
 		)
 		WHERE (
 			("distancerelationship"."reason" = 'distance')
-			AND ("distancerelationship"."weight" > (1000 - {distance}))
+			AND ("distancerelationship"."weight" >= (1000 - {distance}))
 		)
 	UNION SELECT DISTINCT -- select all buildings with manual parcel name annotation overrides
 		"t1"."building_id" AS "building_id",
@@ -82,7 +82,7 @@ WITH "buildingthresholdrelationship" AS (
 		WHERE (
 			("buildingthresholdrelationship"."building_id" IS NULL)
 			AND ("building_relationship"."reason" = 'distance')
-			AND ("building_relationship"."weight" > (1000 - {lone_building_distance}))
+			AND ("building_relationship"."weight" >= (1000 - {lone_building_distance}))
 		)
 )
 SELECT DISTINCT

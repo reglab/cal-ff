@@ -449,6 +449,40 @@ class Building(PublicBase):
             params["hash"] = hashlib.md5(params["geometry"].encode()).hexdigest()
         return params["hash"]
 
+    def to_geojson_feature(self):
+        geom = ga.shape.to_shape(self.geometry)
+        json_geom = shp.geometry.mapping(geom)
+        feature = {
+            "type": "Feature",
+            "geometry": json_geom,
+            "id": str(self.hash),
+        }
+
+        def d2i(dt):
+            return dt and dt.isoformat()
+
+        feature["properties"] = {
+            "id": self.id,
+            "hash": self.hash,
+            "latitude": geom.centroid.y,
+            "longitude": geom.centroid.x,
+            "lat_min": geom.bounds[1],
+            "lon_min": geom.bounds[0],
+            "lat_max": geom.bounds[3],
+            "lon_max": geom.bounds[2],
+            "parcel": {
+                "id": self.parcel.id,
+                "owner": self.parcel.owner,
+                "address": self.parcel.address,
+                "number": self.parcel.number,
+                "county": self.parcel.county.name,
+            }
+            if self.parcel
+            else None,
+        }
+        feature["bbox"] = list(geom.bounds)
+        return feature
+
 
 class BuildingRelationship(PublicBase):
     __tablename__ = "building_relationship"

@@ -87,6 +87,20 @@ def export_geojson(session: Session, output_path: str):
     return features
 
 
+@exporter("buildings", "geojson")
+def export_buildings_geojson(session: Session, output_path: str):
+    query = sa.select(m.Building).options(sa.orm.joinedload(m.Building.parcel))
+    buildings = session.execute(query).scalars().all()
+    features = [building.to_geojson_feature() for building in tqdm(buildings)]
+    geojson = {
+        "type": "FeatureCollection",
+        "features": features,
+    }
+    with open(output_path, "w") as f:
+        json.dump(geojson, f)
+    return features
+
+
 @exporter("parcels", "geojson")
 def export_parcels_geojson(session: Session, output_path: str):
     query = sa.select(m.Parcel).options(
