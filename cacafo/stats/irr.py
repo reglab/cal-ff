@@ -60,7 +60,9 @@ def load_irr_data(session, cache=True):
     _image_id_map = image_id_map(session)
     _image_category_map = image_category_map(session)
 
-    annotations = session.scalars(sa.select(m.IrrAnnotation))
+    annotations = session.scalars(
+        sa.select(m.IrrAnnotation).join(m.Image).where(m.Image.bucket.is_not(None))
+    )
     data = []
     for row in annotations:
         is_cafo = any([x["label"] == "cafo" for x in row.data["annotations"]])

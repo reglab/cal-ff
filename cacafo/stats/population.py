@@ -303,6 +303,9 @@ class Survey:
         strata_dicts.append(post_hoc)
         return pd.DataFrame(strata_dicts)
 
+    def positive(self):
+        return sum(stratum.positive for stratum in self.strata) + self.post_hoc_positive
+
     def aggregated(self):
         post_hoc = self.post_hoc_positive
         completed_strata = [
@@ -614,16 +617,10 @@ def compare_strategies():
 
 
 def number_of_images_per_facility():
-    from cacafo.query import cafos
+    from cacafo.query import cafos, positive_images
 
-    total_positive_images = (
-        sa.select(sa.func.count(sa.distinct(m.Image.id)))
-        .select_from(m.Image)
-        .join(m.ImageAnnotation)
-        .join(m.Building)
-        .where(m.Building.excluded_at.is_(None))
-        .scalar_subquery()
-    )
+    subquery = positive_images().subquery()
+    total_positive_images = sa.select(sa.func.count()).select_from(subquery)
     total_facilities = (
         sa.select(sa.func.count()).select_from(cafos().subquery()).scalar_subquery()
     )

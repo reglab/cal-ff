@@ -237,7 +237,7 @@ from cacafo.data.join import _cli as join_cli
 from cacafo.export import _cli as export_cli
 from cacafo.facilities import _cli as facilities_cli
 from cacafo.naip import _cli as naip_cli
-from cacafo.paper.constants import _cli as constant_cli
+from cacafo.paper import _cli as paper_cli
 from cacafo.urban_mask import _cli as urban_mask_cli
 
 cli.add_command(check_cli)
@@ -247,7 +247,7 @@ cli.add_command(ingest_cli)
 cli.add_command(join_cli)
 cli.add_command(facilities_cli)
 cli.add_command(building_relationships_cli)
-cli.add_command(constant_cli)
+cli.add_command(paper_cli)
 cli.add_command(urban_mask_cli)
 
 if __name__ == "__main__":
