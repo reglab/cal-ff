@@ -3,7 +3,7 @@ from logging.config import fileConfig
 from alembic import context
 from geoalchemy2 import alembic_helpers
 
-from cacafo.db.sa_models import Base
+from cacafo.db.models import Base
 from cacafo.db.session import get_postgres_uri, get_sqlalchemy_engine
 
 # this is the Alembic Config object, which provides

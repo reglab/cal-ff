@@ -467,7 +467,7 @@ def unlabeled_adjacent_images(verbose=False):
 
 
 @check(expected=0)
-def unremoved_images_intersecting_with_urban_mask(verbose=False):
+def unremoved_images_within_urban_mask(verbose=False):
     session = new_session()
     urban_mask = session.execute(sa.select(m.UrbanMask)).scalars().all()
     unremoved_images = (
@@ -490,7 +490,7 @@ def unremoved_images_intersecting_with_urban_mask(verbose=False):
 
 
 @check(expected=0)
-def positive_images_intersecting_with_urban_mask(verbose=False):
+def positive_images_within_urban_mask(verbose=False):
     session = new_session()
     urban_mask = session.execute(sa.select(m.UrbanMask)).scalars().all()
     positive_images = (
