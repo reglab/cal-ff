@@ -53,7 +53,7 @@ def get_sqlalchemy_engine(
     return sa.create_engine(get_postgres_uri(**kwargs), echo=False, pool_pre_ping=True)
 
 
-def get_sqlalchemy_session(
+def new_session(
     **kwargs,
 ):
     """

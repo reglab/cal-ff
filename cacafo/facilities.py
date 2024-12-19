@@ -9,12 +9,12 @@ import sqlalchemy as sa
 
 import cacafo.db.models as m
 from cacafo.cluster.buildings import building_clusters
-from cacafo.db.session import get_sqlalchemy_session
+from cacafo.db.session import new_session
 from cacafo.transform import to_meters
 
 
 def create_facilities():
-    session = get_sqlalchemy_session()
+    session = new_session()
     session.execute(sa.update(m.Facility).values(archived_at=datetime.datetime.now()))
     session.flush()
     bc = building_clusters()
@@ -51,7 +51,7 @@ def create_facilities():
 
 
 def join_facilities():
-    session = get_sqlalchemy_session()
+    session = new_session()
     join_cafo_annotations(session)
     join_animal_type_annotations(session)
     join_construction_annotations(session)
@@ -61,7 +61,7 @@ def join_facilities():
 
 
 def join_permits(session=None):
-    session = session or get_sqlalchemy_session()
+    session = session or new_session()
 
     # Join facilities with permits based on parcels
     GeocodedParcel = sa.orm.aliased(m.Parcel)
@@ -269,7 +269,7 @@ def join_annotations(
 
 
 def join_cafo_annotations(session=None):
-    session = session or get_sqlalchemy_session()
+    session = session or new_session()
     join_annotations(
         session,
         m.CafoAnnotation,
@@ -279,12 +279,12 @@ def join_cafo_annotations(session=None):
 
 
 def join_animal_type_annotations(session=None):
-    session = session or get_sqlalchemy_session()
+    session = session or new_session()
     join_annotations(session, m.AnimalTypeAnnotation, location_column="location")
 
 
 def join_construction_annotations(session=None):
-    session = session or get_sqlalchemy_session()
+    session = session or new_session()
     join_annotations(
         session,
         m.ConstructionAnnotation,
@@ -294,7 +294,7 @@ def join_construction_annotations(session=None):
 
 
 def join_facility_counties(session=None):
-    session = session or get_sqlalchemy_session()
+    session = session or new_session()
     facility_counties = session.execute(
         sa.select(m.Facility, m.Parcel.county_id)
         .join(m.Building, m.Facility.id == m.Building.facility_id)
@@ -337,7 +337,7 @@ def _cli():
 def create_facilities_cli():
     create_facilities()
     # count number of facilities
-    session = get_sqlalchemy_session()
+    session = new_session()
     count = session.execute(
         sa.select(sa.func.count(m.Facility.id)).where(m.Facility.archived_at.is_(None))
     ).scalar()
@@ -369,7 +369,7 @@ def join_facilities_cli(type: str):
 @_cli.command("archive", help="Archive facilities")
 def archive_facilities_cli():
     click.confirm("Are you sure you want to archive all facilities?", abort=True)
-    session = get_sqlalchemy_session()
+    session = new_session()
     archived_at = datetime.datetime.now()
     session.execute(
         sa.update(m.Facility)

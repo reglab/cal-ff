@@ -10,7 +10,7 @@ import cacafo.query
 import cacafo.stats
 import cacafo.stats.irr
 import cacafo.stats.population
-from cacafo.db.session import get_sqlalchemy_session
+from cacafo.db.session import new_session
 from cacafo.transform import to_meters
 
 CONSTANT_METHODS = []
@@ -111,7 +111,7 @@ def num_facilities(session):
 
 @constant_method
 def facilities_with_no_close_permit(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     # get permits more than 1km from any cafo
     permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
     facilities = cafos(session)
@@ -144,7 +144,7 @@ def facilities_with_no_close_permit(verbose=False):
 
 @constant_method
 def facilities_with_no_close_registered_permit(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     # get permits more than 1km from any cafo
     permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
     facilities = cafos(session)
@@ -167,14 +167,14 @@ def facilities_with_no_close_registered_permit(verbose=False):
 
 @constant_method
 def facilities_with_no_best_permit(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     facilities = cafos(session)
     no_best_permits = sum(1 for f in facilities if not f.best_permits)
     return "{:,}".format(no_best_permits)
 
 
 def facilities_with_best_permit(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     facilities = cafos(session)
     best_permits = sum(1 for f in facilities if f.best_permits)
     return "{:,}".format(best_permits)
@@ -182,7 +182,7 @@ def facilities_with_best_permit(verbose=False):
 
 @constant_method
 def facilities_with_permit_animal_type(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     facilities = cafos(session)
     only_cow_permits = [f for f in facilities if f.animal_type_source == "permit"]
     return "{:,}".format(len(only_cow_permits))
@@ -190,7 +190,7 @@ def facilities_with_permit_animal_type(verbose=False):
 
 @constant_method
 def facilities_with_annotated_animal_type(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     facilities = cafos(session)
     only_cow_permits = [f for f in facilities if f.animal_type_source == "annotation"]
     return "{:,}".format(len(only_cow_permits))
@@ -498,7 +498,7 @@ def irr(session):
 def _cli():
     """Write all variables to file."""
     with open(rl.utils.io.get_data_path("paper", "constants.tex"), "w") as f:
-        session = get_sqlalchemy_session()
+        session = new_session()
         for func in CONSTANT_METHODS:
             f.write(
                 r"\newcommand{{\{}}}{{{}}}".format(

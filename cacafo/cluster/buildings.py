@@ -4,7 +4,7 @@ import networkx as nx
 import sqlalchemy as sa
 
 from cacafo.db.models import Building
-from cacafo.db.session import get_sqlalchemy_session
+from cacafo.db.session import new_session
 
 BUILDING_THRESHOLD_RELATIONSHIP_QUERY_PATH = (
     pathlib.Path(__file__).parent / "building_threshold_relationship_query.sql"
@@ -41,13 +41,13 @@ def get_building_relationships(
         )
     )
     if session is None:
-        session = get_sqlalchemy_session()
+        session = new_session()
     return session.execute(query).fetchall()
 
 
 def dict_of_lists(session=None, drop_excluded_buildings=True, **kwargs):
     if session is None:
-        session = get_sqlalchemy_session()
+        session = new_session()
     query = get_building_relationships(session=session, **kwargs)
     condition = True
     if drop_excluded_buildings:

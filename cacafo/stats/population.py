@@ -10,7 +10,7 @@ from statsmodels.stats.proportion import proportion_confint
 
 import cacafo.db.models as m
 import cacafo.query
-from cacafo.db.session import get_sqlalchemy_session
+from cacafo.db.session import new_session
 
 BOOTSTRAP_ITERATIONS = None
 
@@ -38,7 +38,7 @@ def bootstrap_recall(strata_df):
 
 
 def db_strata_counts():
-    session = get_sqlalchemy_session()
+    session = new_session()
 
     all_image_id_strata = session.execute(
         sa.select(

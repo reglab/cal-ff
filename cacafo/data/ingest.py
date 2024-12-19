@@ -19,7 +19,7 @@ import cacafo.data.source
 import cacafo.db.models as m
 import cacafo.owner_name_matching
 import cacafo.transform
-from cacafo.db.session import get_sqlalchemy_session
+from cacafo.db.session import new_session
 
 install(show_locals=True)
 
@@ -68,7 +68,7 @@ def _preflight(session, model, overwrite=False, add=False):
 def ingestor(model, depends_on=[]):
     def decorator(func):
         def wrapper(overwrite=False, add=False, file_path=None):
-            session = get_sqlalchemy_session()
+            session = new_session()
             _preflight(session, model, overwrite, add)
             previous_num = session.execute(
                 sa.select(sa.func.count()).select_from(model)
@@ -633,7 +633,7 @@ def irr_annotation(session, file_path=None):
 
 
 def status():
-    session = get_sqlalchemy_session()
+    session = new_session()
     subclasses = m.Base.__subclasses__()
     for model in subclasses:
         if not _is_populated(session, model):

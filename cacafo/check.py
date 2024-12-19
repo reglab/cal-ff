@@ -9,7 +9,7 @@ from shapely import STRtree
 
 import cacafo.db.models as m
 import cacafo.query
-from cacafo.db.session import get_sqlalchemy_session
+from cacafo.db.session import new_session
 from cacafo.transform import to_meters
 
 checks = {}
@@ -133,7 +133,7 @@ def check(expected=None):
 
 @check(expected=0)
 def cafos_with_overlapping_bounding_boxes(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     cafo_query = cacafo.query.cafos().subquery()
     query = sa.select(m.Facility.id, m.Facility.geometry).where(
         m.Facility.archived_at.is_(None) & m.Facility.id.in_(sa.select(cafo_query.c.id))
@@ -161,7 +161,7 @@ def cafos_with_overlapping_bounding_boxes(verbose=False):
 
 @check()
 def overlapping_parcels(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     query = sa.select(
         m.Parcel.id,
         m.Parcel.inferred_geometry,
@@ -192,7 +192,7 @@ def overlapping_parcels(verbose=False):
 
 @check()
 def unmatched_cafo_annotations(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     query = sa.select(m.CafoAnnotation.id).where(m.CafoAnnotation.facility_id.is_(None))
     results = list(session.execute(query).all())
     for result in results:
@@ -205,7 +205,7 @@ def unmatched_cafo_annotations(verbose=False):
 
 @check()
 def unmatched_animal_type_annotations(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     query = sa.select(m.AnimalTypeAnnotation.id).where(
         m.AnimalTypeAnnotation.facility_id.is_(None)
     )
@@ -220,7 +220,7 @@ def unmatched_animal_type_annotations(verbose=False):
 
 @check()
 def unmatched_construction_annotations(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     query = sa.select(m.ConstructionAnnotation.id).where(
         m.ConstructionAnnotation.facility_id.is_(None)
     )
@@ -235,7 +235,7 @@ def unmatched_construction_annotations(verbose=False):
 
 @check(expected=0)
 def facilities_with_no_cafo_annotations(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     query = (
         sa.select(m.Facility.id)
         .join(
@@ -256,7 +256,7 @@ def facilities_with_no_cafo_annotations(verbose=False):
 
 @check(expected=0)
 def cafos_with_no_construction_annotations(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     query = (
         sa.select(m.Facility)
         .options(sa.orm.joinedload(m.Facility.all_cafo_annotations))
@@ -281,7 +281,7 @@ def cafos_with_no_construction_annotations(verbose=False):
 
 @check()
 def cafos_with_multiple_construction_annotations(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     cafos = cacafo.query.cafos().subquery()
     query = (
         sa.select(cafos.c.id)
@@ -303,7 +303,7 @@ def cafos_with_multiple_construction_annotations(verbose=False):
 
 @check(expected=0)
 def cafos_with_no_animal_type(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     facilities = (
         session.execute(
             sa.select(m.Facility)
@@ -333,7 +333,7 @@ def cafos_with_no_animal_type(verbose=False):
 
 @check(expected=lambda value: value > 2200 and value < 2500)
 def facilities_that_are_cafos(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     facilities = (
         session.execute(
             cacafo.query.cafos(),
@@ -347,7 +347,7 @@ def facilities_that_are_cafos(verbose=False):
 
 @check(expected=lambda value: value < 700 and value > 400)
 def permits_with_no_close_facility(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     # get permits more than 1km from any cafo
     permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
 
@@ -398,7 +398,7 @@ def permits_with_no_close_facility(verbose=False):
 
 @check(expected=lambda value: value < 100)
 def large_active_permits_with_no_close_facility(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     # get permits more than 1km from any cafo
     permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
 
@@ -455,7 +455,7 @@ def large_active_permits_with_no_close_facility(verbose=False):
 
 @check(expected=0)
 def unlabeled_adjacent_images(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     aiq = cacafo.query.unlabeled_adjacent_images(cacafo.query.ex_ante_positive_images())
     uai = session.execute(aiq).unique().scalars().all()
     if verbose:
@@ -468,7 +468,7 @@ def unlabeled_adjacent_images(verbose=False):
 
 @check(expected=0)
 def unremoved_images_intersecting_with_urban_mask(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     urban_mask = session.execute(sa.select(m.UrbanMask)).scalars().all()
     unremoved_images = (
         session.execute(sa.select(m.Image).where(m.Image.bucket.is_not(None)))
@@ -491,7 +491,7 @@ def unremoved_images_intersecting_with_urban_mask(verbose=False):
 
 @check(expected=0)
 def positive_images_intersecting_with_urban_mask(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     urban_mask = session.execute(sa.select(m.UrbanMask)).scalars().all()
     positive_images = (
         session.execute(
@@ -527,7 +527,7 @@ def positive_images_intersecting_with_urban_mask(verbose=False):
     == {"tfidf", "distance", "fuzzy", "parcel owner annotation", "matching parcel"}
 )
 def all_building_relationship_types_present(verbose=False):
-    session = get_sqlalchemy_session()
+    session = new_session()
     # select distinct reason from building_relationship
     query = sa.select(m.BuildingRelationship.reason).distinct()
     results = session.execute(query).scalars().all()

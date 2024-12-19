@@ -137,7 +137,7 @@ def shell():
 
     import cacafo.db.models as models
     import cacafo.query
-    from cacafo.db.session import get_sqlalchemy_session as get_session
+    from cacafo.db.session import new_session
     from cacafo.transform import to_meters, to_wgs
 
     def vim(string, wrap=True):
@@ -157,7 +157,7 @@ def shell():
             return tf.read()
 
     m = models
-    s = get_session()
+    s = new_session()
     session = s
     start_ipython(argv=[], user_ns=locals())
 
@@ -177,9 +177,9 @@ def whereis(table_name, id, column):
     from sqlalchemy import select
 
     from cacafo.db.models import get_model_by_table_name
-    from cacafo.db.session import get_sqlalchemy_session as get_session
+    from cacafo.db.session import new_session
 
-    session = get_session()
+    session = new_session()
     model = get_model_by_table_name(table_name)
 
     stmt = select(model)

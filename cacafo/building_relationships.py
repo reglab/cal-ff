@@ -8,7 +8,7 @@ import sqlalchemy as sa
 import cacafo.data.source
 import cacafo.db.models as m
 import cacafo.owner_name_matching
-from cacafo.db.session import get_sqlalchemy_session
+from cacafo.db.session import new_session
 from cacafo.transform import CA_SRID
 
 BUILDING_RELATIONSHIP_TYPES = {}
@@ -299,7 +299,7 @@ def _cli():
     help="Type of building relationships to create",
 )
 def create_building_relationships_cli(type: str):
-    session = get_sqlalchemy_session()
+    session = new_session()
     if type is None:
         add_all_relationships(session)
     else:
@@ -319,7 +319,7 @@ def create_building_relationships_cli(type: str):
     default="all",
 )
 def delete_building_relationships_cli(type: str):
-    session = get_sqlalchemy_session()
+    session = new_session()
     condition = True
     if type != "all":
         condition = m.BuildingRelationship.reason == type.replace("_", " ")

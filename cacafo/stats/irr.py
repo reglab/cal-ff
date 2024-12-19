@@ -8,7 +8,7 @@ import sqlalchemy as sa
 
 import cacafo.db.models as m
 import cacafo.query as query
-from cacafo.db.session import get_sqlalchemy_session
+from cacafo.db.session import new_session
 
 _IRR_DATA = None
 
@@ -253,7 +253,7 @@ def label_balanced_cohens_kappa(session):
 
 
 if __name__ == "__main__":
-    session = get_sqlalchemy_session()
+    session = new_session()
     data = load_irr_data(session)
     with open(rl.utils.io.get_data_path("paper", "irr_stats.txt"), "w") as f:
         f.write(f"All rater Cohen's Kappa: {overall_cohens_kappa(session)}")

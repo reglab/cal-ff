@@ -6,7 +6,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from thefuzz import fuzz
 
 import cacafo.db.models as m
-from cacafo.db.session import get_sqlalchemy_session
+from cacafo.db.session import new_session
 
 FUZZY_MATCH_WORDS_TO_REMOVE = [
     "llc",
@@ -78,7 +78,7 @@ def annotation(name_1, name_2):
         query = sa.select(m.ParcelOwnerNameAnnotation).where(
             m.ParcelOwnerNameAnnotation.matched
         )
-        session = get_sqlalchemy_session()
+        session = new_session()
         result = session.execute(query).scalars().all()
         _MATCHED_OWNER_NAMES = {r.owner_name: r.related_owner_name for r in result}
     result = _MATCHED_OWNER_NAMES.get(name_1, name_1) == name_2

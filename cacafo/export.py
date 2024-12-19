@@ -418,7 +418,7 @@ def irr_batch(session: Session, output_path: str):
 )
 @click.argument("entity", type=click.Choice(EXPORTERS.keys()))
 def _cli(entity, output_path, format_):
-    from cacafo.db.session import get_sqlalchemy_session
+    from cacafo.db.session import new_session
 
     if not format_:
         if not output_path:
@@ -439,7 +439,7 @@ def _cli(entity, output_path, format_):
             / f"{entity}_{datetime.datetime.now().strftime('%Y-%m-%d')}.{format_}"
         )
 
-    with get_sqlalchemy_session() as session:
+    with new_session() as session:
         exporter = EXPORTERS[entity][format_]
         result = exporter(session, output_path)
         click.echo(f"Exported {len(result)} records to {output_path}")

@@ -9,7 +9,7 @@ import sqlalchemy.orm as orm
 from rich.traceback import install
 
 import cacafo.db.models as m
-from cacafo.db.session import get_sqlalchemy_session
+from cacafo.db.session import new_session
 
 install(show_locals=True)
 
@@ -64,7 +64,7 @@ def _preflight(session, column, extra_dependencies=[], overwrite=False, add=Fals
 def joiner(column, extra_dependencies=[]):
     def decorator(func):
         def wrapper(overwrite=False, add=False):
-            session = get_sqlalchemy_session()
+            session = new_session()
             _preflight(session, column, extra_dependencies, overwrite, add)
             previous_num = session.execute(
                 sa.select(sa.func.count())
@@ -240,7 +240,7 @@ def _cli(tablename, overwrite, add, delete):
         if not conf:
             rich.print("Aborting.")
             return
-        session = get_sqlalchemy_session()
+        session = new_session()
         session.execute(joiner.column.table.update().values({joiner.column: None}))
         session.commit()
         return
