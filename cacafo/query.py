@@ -19,6 +19,55 @@ def cafos():
     )
 
 
+def permitted_cafos():
+    cafos_subquery = cafos().subquery()
+    return (
+        sa.select(m.Facility)
+        .where(m.Facility.id.in_(sa.select(cafos_subquery.c.id)))
+        .join(
+            m.Permit,
+            sa.or_(
+                sa.func.ST_DWithin(
+                    m.Permit.registered_location,
+                    m.Facility.geometry,
+                    1000,
+                ),
+                sa.func.ST_DWithin(
+                    m.Permit.geocoded_address_location,
+                    m.Facility.geometry,
+                    1000,
+                ),
+            ),
+        )
+    )
+
+
+def unpermitted_cafos():
+    cafos_subquery = cafos().subquery()
+    return (
+        sa.select(m.Facility)
+        .where(m.Facility.id.in_(sa.select(cafos_subquery.c.id)))
+        .join(
+            m.Permit,
+            sa.or_(
+                sa.func.ST_DWithin(
+                    m.Permit.registered_location,
+                    m.Facility.geometry,
+                    1000,
+                ),
+                sa.func.ST_DWithin(
+                    m.Permit.geocoded_address_location,
+                    m.Facility.geometry,
+                    1000,
+                ),
+            ),
+            isouter=True,
+        )
+        .group_by(m.Facility.id)
+        .having(sa.func.count(m.Permit.id) == 0)
+    )
+
+
 def positive_images():
     cafo_query = cafos().subquery()
     return (
