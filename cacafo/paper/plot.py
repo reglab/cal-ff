@@ -19,6 +19,7 @@ from matplotlib_scalebar.scalebar import ScaleBar
 from tqdm import tqdm
 
 import cacafo.db.models as m
+import cacafo.query
 import cacafo.naip
 from cacafo.cluster.buildings import building_clusters
 from cacafo.db.session import new_session
@@ -237,54 +238,30 @@ def facility_counts_by_county():
     return sorted_counts
 
 
-@cache
-def constructions_and_destructions_by_year():
-    facilities = pd.DataFrame(
-        {
-            "year": range(1985, 2024),
-        }
+@figure()
+def map_example_permitted_facilities():
+    session = new_session()
+    permitted_facilities = (
+        session.scalars(cacafo.query.permitted_cafos().order_by(m.Facility.id))
+        .unique()
+        .all()
     )
-    facilities["started_constructions"] = facilities["year"].apply(
-        lambda x: Facility.select()
-        .join(ConstructionAnnotation)
-        .where(
-            ConstructionAnnotation.construction_lower_bound == x,
-        )
-        .count()
+    random.seed(7)
+    permitted_facilities = random.sample(permitted_facilities, 4)
+    map_facilities(permitted_facilities)
+
+
+@figure()
+def map_example_unpermitted_facilities():
+    session = new_session()
+    unpermitted_facilities = (
+        session.scalars(cacafo.query.unpermitted_cafos().order_by(m.Facility.id))
+        .unique()
+        .all()
     )
-    facilities["completed_constructions"] = facilities["year"].apply(
-        lambda x: Facility.select()
-        .join(ConstructionAnnotation)
-        .where(
-            (ConstructionAnnotation.construction_upper_bound == x)
-            & (ConstructionAnnotation.construction_lower_bound.is_null(False))
-        )
-        .count()
-    )
-    facilities["started_destructions"] = facilities["year"].apply(
-        lambda x: Facility.select()
-        .join(ConstructionAnnotation)
-        .where(
-            ConstructionAnnotation.destruction_lower_bound == x,
-        )
-        .count()
-    )
-    facilities["completed_destructions"] = facilities["year"].apply(
-        lambda x: Facility.select()
-        .join(ConstructionAnnotation)
-        .where(
-            (ConstructionAnnotation.destruction_upper_bound == x)
-            & (ConstructionAnnotation.destruction_lower_bound.is_null(False))
-        )
-        .count()
-    )
-    # flatten the dataframe
-    facilities = facilities.melt(
-        id_vars=["year"],
-        var_name="event",
-        value_name="count",
-    )
-    return facilities
+    random.seed(7)
+    unpermitted_facilities = random.sample(unpermitted_facilities, 4)
+    map_facilities(unpermitted_facilities)
 
 
 @table(
@@ -298,65 +275,63 @@ def constructions_and_destructions_by_year():
     ),
 )
 def permitted_by_animal_type():
-    permitted_facilities = (
-        Facility.select(
-            Facility.id,
+    session = new_session()
+    permitted_facilities = session.scalars(
+        cacafo.query.permitted_cafos()
+        .options(
+            sa.orm.joinedload(m.Facility.best_permits),
+            sa.orm.joinedload(m.Facility.all_animal_type_annotations),
+            sa.orm.Load(m.Facility).raiseload("*"),
         )
-        .join(
-            FacilityPermittedLocation,
-            pw.JOIN.LEFT_OUTER,
+        .order_by(m.Facility.id)
+    ).unique()
+    unpermitted_facilities = session.scalars(
+        cacafo.query.unpermitted_cafos()
+        .options(
+            sa.orm.joinedload(m.Facility.best_permits),
+            sa.orm.joinedload(m.Facility.all_animal_type_annotations),
+            sa.orm.Load(m.Facility).raiseload("*"),
         )
-        .where(
-            FacilityPermittedLocation.id.is_null(False),
-        )
-        .distinct()
-        .cte("permitted_facilities")
+        .order_by(m.Facility.id)
+    ).unique()
+    df = pd.DataFrame(
+        [
+            {
+                "animal_type": facility.animal_type_str.title(),
+                "facility_id": facility.id,
+                "permitted": True,
+            }
+            for facility in permitted_facilities
+        ] + [
+            {
+                "animal_type": facility.animal_type_str.title(),
+                "facility_id": facility.id,
+                "permitted": False,
+            }
+            for facility in unpermitted_facilities
+        ]
     )
-    counts = (
-        Facility.select(
-            AnimalType.name.alias("animal_type"),
-            pw.fn.SUM(
-                pw.Case(None, ((permitted_facilities.c.id.is_null(False), 1),), 0)
-            ).alias("permitted_count"),
-            pw.fn.SUM(
-                pw.Case(None, ((permitted_facilities.c.id.is_null(True), 1),), 0)
-            ).alias("unpermitted_count"),
-            pw.fn.COUNT(FacilityAnimalType.id).alias("total_count"),
-        )
-        .join(
-            FacilityAnimalType,
-            pw.JOIN.LEFT_OUTER,
-        )
-        .join(
-            AnimalType,
-            pw.JOIN.LEFT_OUTER,
-        )
-        .join(
-            permitted_facilities,
-            pw.JOIN.LEFT_OUTER,
-            on=(permitted_facilities.c.id == Facility.id),
-        )
-        .group_by(
-            AnimalType.name,
-        )
-        .with_cte(permitted_facilities)
-        .dicts()
-    )
-    counts = pd.DataFrame(counts)
-    sorted_counts = counts.sort_values("permitted_count", ascending=False)
-    sorted_counts["animal_type"] = sorted_counts["animal_type"].apply(
-        lambda s: s.title()
-    )
-    sorted_counts = sorted_counts.rename(
+    counts = df.groupby(["animal_type", "permitted"]).size().unstack().fillna(0)
+    counts["total"] = counts.sum(axis=1)
+    counts = counts.sort_values("total", ascending=False)
+    counts = counts.reset_index()
+    # make permit and total integers
+    counts["Permit <1km"] = counts["Permit <1km"].astype(int)
+    counts["No Permit <1km"] = counts["No Permit <1km"].astype(int)
+    counts["Total"] = counts["Total"].astype(int)
+    counts = counts.rename(
         columns={
             "animal_type": "Animal Type",
-            "permitted_count": "Permit <1km",
-            "unpermitted_count": "No Permit <1km",
-            "total_count": "Total",
+            False: "No Permit <1km",
+            True: "Permit <1km",
+            "total": "Total",
         }
     )
-
-    return sorted_counts
+    # add total line at the bottom
+    total_row = counts.sum()
+    total_row["Animal Type"] = "Total"
+    counts = counts.append(total_row, ignore_index=True)
+    return counts
 
 
 @table(
@@ -526,151 +501,8 @@ def map_facility_locations():
     base.set_axis_off()
 
 
-@figure()
-def number_of_constructions_per_year():
-    facilities = constructions_and_destructions_by_year()
-    # only started and completed constructions
-    facilities = facilities[
-        facilities["event"].isin(
-            [
-                "started_constructions",
-                "completed_constructions",
-            ]
-        )
-    ]
-    sns.lineplot(
-        data=facilities,
-        x="year",
-        y="count",
-        style="event",
-        style_order=[
-            "completed_constructions",
-            "started_constructions",
-        ],
-        alpha=0.8,
-    )
-    plt.title("Construction Events Observed Per Year, 2017 NAIP Cohort")
-    plt.xlabel("Year")
-    plt.ylabel("Number of Events")
-    plt.legend(
-        labels=["Started", "Completed"],
-        title=None,
-        fontsize=6,
-        frameon=False,
-        handles=[
-            plt.Line2D(
-                [],
-                [],
-                linestyle="--",
-            ),
-            plt.Line2D(
-                [],
-                [],
-                linestyle="-",
-            ),
-        ],
-    )
-
-
-@figure()
-def number_of_destructions_per_year():
-    facilities = constructions_and_destructions_by_year()
-    # only started and completed constructions
-    facilities = facilities[
-        facilities["event"].isin(
-            [
-                "started_destructions",
-                "completed_destructions",
-            ]
-        )
-    ]
-    sns.lineplot(
-        data=facilities,
-        x="year",
-        y="count",
-        style="event",
-        style_order=[
-            "completed_destructions",
-            "started_destructions",
-        ],
-        alpha=0.8,
-    )
-    plt.title("Destruction Event Observed Per Year, 2017 NAIP Cohort")
-    plt.xlabel("Year")
-    plt.ylabel("Number of Events")
-    plt.legend(
-        labels=["Started", "Completed"],
-        title=None,
-        fontsize=6,
-        frameon=False,
-        handles=[
-            plt.Line2D(
-                [],
-                [],
-                linestyle="--",
-            ),
-            plt.Line2D(
-                [],
-                [],
-                linestyle="-",
-            ),
-        ],
-    )
-
-
-@figure()
-def map_example_permitted_facilities(plot_permits=False):
-    permitted_facilities = list(
-        Facility.select()
-        .join(
-            FacilityPermittedLocation,
-        )
-        .distinct()
-    )
-    random.seed(7)
-    permitted_facilities = random.sample(permitted_facilities, 4)
-    permit_locations = []
-    if plot_permits:
-        permit_locations = [
-            list(
-                FacilityPermittedLocation.select(
-                    PermittedLocation.longitude,
-                    PermittedLocation.latitude,
-                )
-                .join(
-                    PermittedLocation,
-                )
-                .where(
-                    FacilityPermittedLocation.facility == pf,
-                )
-                .dicts()
-            )
-            for pf in facilities
-        ]
-    map_facilities(permitted_facilities, permit_locations)
-
-
-@figure()
-def map_example_unpermitted_facilities():
-    unpermitted_facilities = list(
-        Facility.select()
-        .join(
-            FacilityPermittedLocation,
-            pw.JOIN.LEFT_OUTER,
-        )
-        .where(
-            FacilityPermittedLocation.id.is_null(True),
-        )
-        .order_by(Facility.id)
-        .distinct()
-    )
-    random.seed(7)
-    unpermitted_facilities = random.sample(unpermitted_facilities, 4)
-    map_facilities(unpermitted_facilities)
-
-
 def map_facilities(facilities, permit_locations=[]):
-    gdfs = [facility.to_gdf() for facility in facilities]
+    gdfs = [facility.gdf for facility in facilities]
     fig, axes = plt.subplots(2, 2, figsize=(6, 6))
     if not permit_locations:
         permit_locations = [None] * len(facilities)

@@ -250,7 +250,7 @@ class Image(PublicBase):
     @classmethod
     def get_images_for_area(cls, geometry: shp.geometry.base.BaseGeometry, session):
         query = sa.select(cls).where(
-            cls.geometry.intersects(geometry) & cls.label_status != "removed"
+            sa.func.ST_Intersects(cls.geometry, geometry.wkt) & (cls.label_status != "removed")
         )
         return session.execute(query).scalars().all()
 
@@ -669,6 +669,16 @@ class Facility(PublicBase):
         return set()
 
     @property
+    def animal_type_str(self):
+        if len(self.animal_types) == 1:
+            return self.animal_types.pop()
+        # choose most specific type
+        if set(self.animal_types) == {"cattle", "dairy"}:
+            return "dairy"
+        return "two or more"
+
+
+    @property
     def animal_type_source(self):
         annotated_types = set(
             [
@@ -720,6 +730,14 @@ class Facility(PublicBase):
     @property
     def parcels(self):
         return [building.parcel for building in self.buildings if building.parcel]
+
+    @property
+    def gdf(self):
+        import geopandas as gpd
+
+        return gpd.GeoDataFrame.from_features(
+            [self.to_geojson_feature()], crs="EPSG:4326"
+        )
 
 
 class UrbanMask(PublicBase):

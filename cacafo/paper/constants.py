@@ -112,34 +112,10 @@ def num_facilities(session):
 @constant_method
 def facilities_with_no_close_permit(verbose=False):
     session = new_session()
-    # get permits more than 1km from any cafo
-    permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
-    facilities = cafos(session)
-    facilities_tree = shp.STRtree(
-        [to_meters(ga.shape.to_shape(f.geometry)) for f in facilities]
-    )
-    all_facility_ids = set(f.id for f in facilities)
-    matched_facility_ids = set()
-    for permit in permits:
-        registered = permit.registered_location and to_meters(
-            ga.shape.to_shape(permit.registered_location)
-        )
-        geocoded = permit.geocoded_address_location and to_meters(
-            ga.shape.to_shape(permit.geocoded_address_location)
-        )
-        registered_close_facilities = facilities_tree.query(
-            registered, predicate="dwithin", distance=1000
-        )
-        geocoded_close_facilities = facilities_tree.query(
-            geocoded, predicate="dwithin", distance=1000
-        )
-        for r in registered_close_facilities:
-            matched_facility_ids.add(facilities[r].id)
-        for g in geocoded_close_facilities:
-            matched_facility_ids.add(facilities[g].id)
-    unmatched_facility_ids = all_facility_ids - matched_facility_ids
-    no_close_matches = len(unmatched_facility_ids)
-    return "{:,}".format(no_close_matches)
+    no_close_matches = session.execute(
+        cacafo.query.unpermitted_facilities().select()
+    ).unique().scalars().all()
+    return "{:,}".format(len(no_close_matches))
 
 
 @constant_method
