@@ -39,6 +39,7 @@ def permitted_cafos():
                 ),
             ),
         )
+        .group_by(m.Facility.id)
     )
 
 

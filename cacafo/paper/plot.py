@@ -19,8 +19,8 @@ from matplotlib_scalebar.scalebar import ScaleBar
 from tqdm import tqdm
 
 import cacafo.db.models as m
-import cacafo.query
 import cacafo.naip
+import cacafo.query
 from cacafo.cluster.buildings import building_clusters
 from cacafo.db.session import new_session
 
@@ -108,8 +108,8 @@ class TableMethod(PaperMethod):
 
     def paths(self):
         return [
-            TableMethod.path / f"{self.name}.tex",
-            TableMethod.path / f"{self.name}.csv",
+            TableMethod.path / "tex" / f"{self.name}.tex",
+            TableMethod.path / "csv" / f"{self.name}.csv",
         ]
 
     def save(self, path):
@@ -179,63 +179,37 @@ def table(header=None, footer=None, cache=True):
 @cache
 def facility_counts_by_county():
     session = new_session()
-    permitted_facilities = (
-        sa.select(m.Facility.id)
-        .join(m.Facility.best_permits)
-        .distinct()
-        .cte("permitted_facilities")
-    )
-    facility_to_county = {
-        facility.id: County.geocode(lon=facility.longitude, lat=facility.latitude).id
-        for facility in Facility.select()
-    }
-
-    # Create a temporary table using SQLAlchemy
-    facility_county = sa.Table(
-        "facility_county",
-        sa.MetaData(),
-        sa.Column(
-            "facility_id", sa.Integer, sa.ForeignKey("facility.id"), primary_key=True
-        ),
-        sa.Column("county_id", sa.Integer, sa.ForeignKey("county.id")),
-    )
-
-    # Create and populate temporary table
-    facility_county.create(session.bind)
-    session.execute(
-        facility_county.insert(),
-        [
-            {"facility_id": facility, "county_id": county}
-            for facility, county in facility_to_county.items()
-        ],
-    )
-    counts = session.execute(
-        sa.select(
-            m.County.name.label("county"),
-            sa.func.sum(
-                sa.case((permitted_facilities.c.id.is_not(None), 1), else_=0)
-            ).label("permitted_count"),
-            sa.func.sum(
-                sa.case((permitted_facilities.c.id.is_(None), 1), else_=0)
-            ).label("unpermitted_count"),
-            sa.func.count(facility_county.c.facility_id).label("total_count"),
+    permitted_facilities_subq = cacafo.query.permitted_cafos().subquery()
+    unpermitted_facilities_subq = cacafo.query.unpermitted_cafos().subquery()
+    # get rows of county, number of permitted facilities, number of unpermitted facilities
+    permitted_counts = (
+        session.execute(
+            sa.select(
+                m.County.name,
+                sa.func.count(sa.distinct(permitted_facilities_subq.c.id)).label(
+                    "permitted_count"
+                ),
+                sa.func.count(sa.distinct(unpermitted_facilities_subq.c.id)).label(
+                    "unpermitted_count"
+                ),
+            )
+            .select_from(m.County)
+            .outerjoin(
+                permitted_facilities_subq,
+                permitted_facilities_subq.c.county_id == m.County.id,
+            )
+            .outerjoin(
+                unpermitted_facilities_subq,
+                unpermitted_facilities_subq.c.county_id == m.County.id,
+            )
+            .group_by(m.County.name)
         )
-        .select_from(facility_county)
-        .join(m.County, facility_county.c.county_id == m.County.id)
-        .join(
-            permitted_facilities,
-            permitted_facilities.c.id == facility_county.c.facility_id,
-            isouter=True,
-        )
-        .group_by(m.County.name)
-    ).all()
-    counts = pd.DataFrame(counts)
+    )
+    counts = pd.DataFrame(permitted_counts, columns=["county", "permitted_count", "unpermitted_count"])
+    counts["total_count"] = counts["permitted_count"] + counts["unpermitted_count"]
+    counts = counts.sort_values("total_count", ascending=False)
+    return counts
 
-    # Clean up temporary table
-    facility_county.drop(session.bind)
-    FacilityCounty.drop_table()
-    sorted_counts = counts.sort_values("permitted_count", ascending=False)
-    return sorted_counts
 
 
 @figure()
@@ -302,7 +276,8 @@ def permitted_by_animal_type():
                 "permitted": True,
             }
             for facility in permitted_facilities
-        ] + [
+        ]
+        + [
             {
                 "animal_type": facility.animal_type_str.title(),
                 "facility_id": facility.id,
@@ -316,9 +291,6 @@ def permitted_by_animal_type():
     counts = counts.sort_values("total", ascending=False)
     counts = counts.reset_index()
     # make permit and total integers
-    counts["Permit <1km"] = counts["Permit <1km"].astype(int)
-    counts["No Permit <1km"] = counts["No Permit <1km"].astype(int)
-    counts["Total"] = counts["Total"].astype(int)
     counts = counts.rename(
         columns={
             "animal_type": "Animal Type",
@@ -330,7 +302,13 @@ def permitted_by_animal_type():
     # add total line at the bottom
     total_row = counts.sum()
     total_row["Animal Type"] = "Total"
-    counts = counts.append(total_row, ignore_index=True)
+    counts = pd.concat(
+        [counts, pd.DataFrame([total_row], columns=counts.columns)],
+        ignore_index=True,
+    )
+    counts["Total"] = counts["Total"].astype(int)
+    counts["Permit <1km"] = counts["Permit <1km"].astype(int)
+    counts["No Permit <1km"] = counts["No Permit <1km"].astype(int)
     return counts
 
 
@@ -346,9 +324,8 @@ def permitted_by_animal_type():
 )
 def permitted_by_county():
     sorted_counts = facility_counts_by_county()
-    # make an 'all other' category for counties with less than 10 facilities
-    other = sorted_counts[sorted_counts["permitted_count"] < 10]
-    sorted_counts = sorted_counts[sorted_counts["total_count"] >= 10]
+    other = sorted_counts[sorted_counts["permitted_count"] < 50]
+    sorted_counts = sorted_counts[sorted_counts["total_count"] >= 50]
     sorted_counts = pd.concat(
         [
             sorted_counts,

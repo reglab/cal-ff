@@ -112,9 +112,12 @@ def num_facilities(session):
 @constant_method
 def facilities_with_no_close_permit(verbose=False):
     session = new_session()
-    no_close_matches = session.execute(
-        cacafo.query.unpermitted_facilities().select()
-    ).unique().scalars().all()
+    no_close_matches = (
+        session.execute(cacafo.query.unpermitted_facilities().select())
+        .unique()
+        .scalars()
+        .all()
+    )
     return "{:,}".format(len(no_close_matches))
 
 

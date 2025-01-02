@@ -250,7 +250,8 @@ class Image(PublicBase):
     @classmethod
     def get_images_for_area(cls, geometry: shp.geometry.base.BaseGeometry, session):
         query = sa.select(cls).where(
-            sa.func.ST_Intersects(cls.geometry, geometry.wkt) & (cls.label_status != "removed")
+            sa.func.ST_Intersects(cls.geometry, geometry.wkt)
+            & (cls.label_status != "removed")
         )
         return session.execute(query).scalars().all()
 
@@ -676,7 +677,6 @@ class Facility(PublicBase):
         if set(self.animal_types) == {"cattle", "dairy"}:
             return "dairy"
         return "two or more"
-
 
     @property
     def animal_type_source(self):
