@@ -1,10 +1,10 @@
-import sqlalchemy as sa
 import geoalchemy2 as ga
 import shapely as shp
+import sqlalchemy as sa
 
+import cacafo.db.models as m
 from cacafo.db.session import new_session
 from cacafo.transform import to_meters
-import cacafo.db.models as m
 
 
 def _conjunction_dict_of_sets(dos1, dos2):
@@ -99,7 +99,9 @@ def facility_permit_parcel_matches(session=None) -> dict[int, set[int]]:
     return facilities
 
 
-def facility_permit_distance_matches(distance=200, excluded_facility_ids={}, session=None) -> dict[int, set[int]]:
+def facility_permit_distance_matches(
+    distance=200, excluded_facility_ids={}, session=None
+) -> dict[int, set[int]]:
     if session is None:
         session = new_session()
     facilities = list(
@@ -111,11 +113,7 @@ def facility_permit_distance_matches(distance=200, excluded_facility_ids={}, ses
         .scalars()
         .all()
     )
-    permits = list(
-        session.execute(sa.select(m.Permit).where(m.Permit.facility_id.is_(None)))
-        .scalars()
-        .all()
-    )
+    permits = list(session.execute(sa.select(m.Permit)).scalars().all())
 
     facility_geoms = [
         to_meters(ga.shape.to_shape(facility.geometry)) for facility in facilities
@@ -140,8 +138,10 @@ def facility_permit_distance_matches(distance=200, excluded_facility_ids={}, ses
     )
     geocoded_matches = {}
     for permit_idx, facility_idx in zip(*geocoded_address_matches):
-        geocoded_matches[permit_idx] = geocoded_matches.get(permit_idx, set()) | {
-            facility_idx
+        permit_id = permits[permit_idx].id
+        facility_id = facilities[facility_idx].id
+        geocoded_matches[permit_id] = geocoded_matches.get(permit_id, set()) | {
+            facility_id
         }
     registered_location_matches = facility_strtree.query(
         permit_registered_location_geoms,
@@ -150,8 +150,10 @@ def facility_permit_distance_matches(distance=200, excluded_facility_ids={}, ses
     )
     registered_matches = {}
     for permit_idx, facility_idx in zip(*registered_location_matches):
-        registered_matches[permit_idx] = registered_matches.get(permit_idx, set()) | {
-            facility_idx
+        permit_id = permits[permit_idx].id
+        facility_id = facilities[facility_idx].id
+        registered_matches[permit_id] = registered_matches.get(permit_id, set()) | {
+            facility_id
         }
 
     both_matches = {
@@ -159,16 +161,18 @@ def facility_permit_distance_matches(distance=200, excluded_facility_ids={}, ses
     }
 
     facility_to_permit_matches = {}
-    for permit_idx, facilities in both_matches.items():
+    for permit_id, facilities in both_matches.items():
         if len(facilities) == 1:
             f = facilities.pop()
             facility_to_permit_matches[f] = facility_to_permit_matches.get(f, set()) | {
-                permit_idx
+                permit_id
             }
     return facility_to_permit_matches
 
 
-def facility_parcel_then_distance_matches(distance=200, session=None) -> dict[int, set[int]]:
+def facility_parcel_then_distance_matches(
+    distance=200, session=None
+) -> dict[int, set[int]]:
     """
     Returns a dictionary of facility ids to a set of permit ids, based on the
     criteria that both permit locations match to the same facility's parcels or within distance
@@ -178,12 +182,12 @@ def facility_parcel_then_distance_matches(distance=200, session=None) -> dict[in
         session = new_session()
     facility_parcel_matches = facility_permit_parcel_matches(session)
     facility_distance_matches = facility_permit_distance_matches(
-        distance=distance, excluded_facility_ids=facility_parcel_matches.keys(), session=session
+        distance=distance,
+        session=session,
     )
     facility_matches = _disjunction_dict_of_sets(
         facility_parcel_matches, facility_distance_matches
     )
     # facility_matches = _remove_duplicate_entries(facility_matches)
     facility_matches = _remove_empty_entries(facility_matches)
-    import ipdb; ipdb.set_trace()
     return facility_matches

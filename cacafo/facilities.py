@@ -7,9 +7,9 @@ import shapely as shp
 import shapely.ops
 import sqlalchemy as sa
 
+import cacafo.cluster.permits
 import cacafo.db.models as m
 from cacafo.cluster.buildings import building_clusters
-from cacafo.cluster.permits import facility_permit_parcel_matches
 from cacafo.db.session import new_session
 from cacafo.transform import to_meters
 
@@ -63,13 +63,14 @@ def join_facilities():
 
 def join_permits(session=None):
     session = session or new_session()
+    session.execute(sa.update(m.Permit).values(facility_id=None))
     permits = {
         permit.id: permit
-        for permit in session.execute(
-            sa.select(m.Permit)
-        ).scalars().all()
+        for permit in session.execute(sa.select(m.Permit)).scalars().all()
     }
-    facility_id_to_permit_ids = facility_permit_parcel_matches(session)
+    facility_id_to_permit_ids = (
+        cacafo.cluster.permits.facility_parcel_then_distance_matches(session=session)
+    )
     permit_id_to_facility_id = {
         permit_id: facility_id
         for facility_id, permit_ids in facility_id_to_permit_ids.items()
@@ -80,18 +81,9 @@ def join_permits(session=None):
         permit.facility_id = facility_id
         session.add(permit)
     session.flush()
-
-    facility_to_permit_matches = cacafo.cluster.permits.facility_permit_distance_matches(200)
-
-    for facility_id, permit_ids in facility_to_permit_matches.items():
-        for permit_id in permit_ids:
-            permit = permits[permit_id]
-            permit.facility_id = facility
-            session.add(permit)
-    session.flush()
     session.commit()
     click.secho(
-        f"Joined permits to facilities",
+        f"Joined {len(permit_id_to_facility_id)} permits to facilities",
         fg="green",
     )
 
@@ -256,7 +248,7 @@ def create_facilities_cli():
 @_cli.command("join", help="Join annotations to facilities")
 @click.option(
     "--type",
-    type=click.Choice(["all", "cafo", "animal_type", "construction"]),
+    type=click.Choice(["all", "cafo", "animal_type", "construction", "permits"]),
     default="all",
     help="Type(s) of annotation to join",
 )
@@ -270,6 +262,8 @@ def join_facilities_cli(type: str):
             join_animal_type_annotations()
         case "construction":
             join_construction_annotations()
+        case "permits":
+            join_permits()
         case _:
             raise ValueError(f"Invalid type: {type}")
     click.echo(f"Joined {type} annotations to facilities")

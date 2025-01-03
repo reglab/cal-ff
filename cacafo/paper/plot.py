@@ -14,10 +14,10 @@ import pandas as pd
 import rich_click as click
 import rl.utils.io
 import seaborn as sns
+import shapely as shp
 import sqlalchemy as sa
 from matplotlib_scalebar.scalebar import ScaleBar
 from tqdm import tqdm
-import geoalchemy2 as ga
 
 import cacafo.db.models as m
 import cacafo.naip
@@ -368,57 +368,6 @@ def permitted_by_county():
 
 
 @figure()
-def map_facility_counts_by_county():
-    counts = facility_counts_by_county()
-    county_gdf = gpd.GeoDataFrame(
-        County.select(County.name, County.geometry).dicts(),
-        crs="EPSG:4326",
-    )
-    county_gdf = county_gdf.merge(
-        counts,
-        how="left",
-        left_on="name",
-        right_on="county",
-    ).fillna(0)
-    county_gdf.plot(
-        column="permitted_count",
-        cmap="viridis",
-        legend=True,
-        legend_kwds={"label": "Permitted Facilities"},
-        edgecolor="white",
-        linewidth=0.3,
-        alpha=0.5,
-    )
-    plt.title("Permitted Facilities by County")
-    plt.axis("off")
-
-
-@figure()
-def map_facility_counts_by_county_unpermitted():
-    counts = facility_counts_by_county()
-    county_gdf = gpd.GeoDataFrame(
-        County.select(County.name, County.geometry).dicts(),
-        crs="EPSG:4326",
-    )
-    county_gdf = county_gdf.merge(
-        counts,
-        how="left",
-        left_on="name",
-        right_on="county",
-    ).fillna(0)
-    county_gdf.plot(
-        column="unpermitted_count",
-        cmap="viridis",
-        legend=True,
-        legend_kwds={"label": "Unpermitted Facilities"},
-        edgecolor="white",
-        linewidth=0.3,
-    )
-    plt.title("Unpermitted Facilities by County")
-    plt.axis("off")
-
-
-@figure()
 def map_facility_locations():
     session = new_session()
     counties = session.scalars(sa.select(m.County)).all()
@@ -681,15 +630,14 @@ def fuzzy_examples():
 @table()
 def parcel_name_overrides():
     session = new_session()
-    rows = (
-        session.scalars(
-            sa.select(m.ParcelOwnerNameAnnotation).where(
-                m.ParcelOwnerNameAnnotation.matched == True
-            )
+    rows = session.scalars(
+        sa.select(m.ParcelOwnerNameAnnotation).where(
+            m.ParcelOwnerNameAnnotation.matched
         )
-        .all()
+    ).all()
+    df = pd.DataFrame(
+        [{"Owner 1": row.owner_name, "Owner 2": row.related_owner_name} for row in rows]
     )
-    df = pd.DataFrame([{"Owner 1": row.owner_name, "Owner 2": row.related_owner_name} for row in rows])
     df["Owner 1"] = df["Owner 1"].apply(lambda x: x.replace("&", r"\&"))
     df["Owner 2"] = df["Owner 2"].apply(lambda x: x.replace("&", r"\&"))
     return df
@@ -746,94 +694,22 @@ def facility_matching_parameters():
 
 @figure()
 def permit_sensitivity_analysis():
-    from cacafo.cluster.permits import (
-        _conjunction_dict_of_sets,
-        _disjunction_dict_of_sets,
-        _remove_duplicate_entries,
-        _remove_empty_entries,
-        facility_permit_distance_matches,
-        facility_permit_parcel_matches,
-    )
-
-    cow_permit_ids = {
-        p.id
-        for p in Permit.select(Permit.id).where(Permit.data["Program"] == "ANIWSTCOWS")
-    }
-    cow_permit_matches = lambda matches: _remove_empty_entries(
-        {
-            f: {p for p in permits if p in cow_permit_ids}
-            for f, permits in matches.items()
-        }
-    )
+    from cacafo.cluster.permits import facility_parcel_then_distance_matches
 
     matching_distances = range(0, 1001, 50)
 
-    permit_data_filter = PermitPermittedLocation.source == "permit data"
-    geocoding_filter = PermitPermittedLocation.source == "address geocoding"
-    distance_filter = lambda d: FacilityPermittedLocation.distance < d
-
-    parcel_matches = facility_permit_parcel_matches()
-
     data = []
     for distance in matching_distances:
-        # permit data only
-        location_type = {
-            "permit data": facility_permit_distance_matches(
-                permit_data_filter & distance_filter(distance)
-            ),
-            "geocoding": facility_permit_distance_matches(
-                geocoding_filter & distance_filter(distance)
-            ),
-        }
-        location_type["both"] = _conjunction_dict_of_sets(
-            location_type["permit data"], location_type["geocoding"]
-        )
-        location_type["either"] = _disjunction_dict_of_sets(
-            location_type["permit data"], location_type["geocoding"]
-        )
-        for location_type_name, location_type_matches in location_type.items():
-            row = {
+        data.append(
+            {
                 "distance": distance,
-                "location_type": location_type_name,
+                "n_clean_matches": facility_parcel_then_distance_matches(
+                    distance=distance
+                ),
             }
-
-            matches = location_type_matches
-
-            distance_only_matches = _remove_empty_entries(
-                _remove_duplicate_entries(matches)
-            )
-            distance_only_row = {
-                "matching_method": "distance only",
-                "n_clean_matches": len(distance_only_matches),
-            } | row
-            data.append(distance_only_row)
-
-            parcel_or_distance_matches = _remove_empty_entries(
-                _remove_duplicate_entries(
-                    _disjunction_dict_of_sets(matches, parcel_matches)
-                )
-            )
-            parcel_or_distance_row = {
-                "matching_method": "parcel + distance",
-                "n_clean_matches": len(parcel_or_distance_matches),
-            } | row
-            data.append(parcel_or_distance_row)
-
-            parcel_then_distance_matches = _disjunction_dict_of_sets(
-                parcel_matches,
-                _remove_empty_entries(_remove_duplicate_entries(matches)),
-            )
-            parcel_then_distance_row = {
-                "matching_method": "parcel then distance",
-                "n_clean_matches": len(parcel_then_distance_matches),
-            } | row
-            data.append(parcel_then_distance_row)
+        )
 
     df = pd.DataFrame(data)
-    # only both and parcel then distance
-    df = df[df["matching_method"] == "parcel then distance"]
-    df = df[df["location_type"] == "both"]
-    # make lineplot
     sns.lineplot(
         data=df,
         x="distance",
