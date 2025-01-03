@@ -17,6 +17,7 @@ import seaborn as sns
 import sqlalchemy as sa
 from matplotlib_scalebar.scalebar import ScaleBar
 from tqdm import tqdm
+import geoalchemy2 as ga
 
 import cacafo.db.models as m
 import cacafo.naip
@@ -182,34 +183,33 @@ def facility_counts_by_county():
     permitted_facilities_subq = cacafo.query.permitted_cafos().subquery()
     unpermitted_facilities_subq = cacafo.query.unpermitted_cafos().subquery()
     # get rows of county, number of permitted facilities, number of unpermitted facilities
-    permitted_counts = (
-        session.execute(
-            sa.select(
-                m.County.name,
-                sa.func.count(sa.distinct(permitted_facilities_subq.c.id)).label(
-                    "permitted_count"
-                ),
-                sa.func.count(sa.distinct(unpermitted_facilities_subq.c.id)).label(
-                    "unpermitted_count"
-                ),
-            )
-            .select_from(m.County)
-            .outerjoin(
-                permitted_facilities_subq,
-                permitted_facilities_subq.c.county_id == m.County.id,
-            )
-            .outerjoin(
-                unpermitted_facilities_subq,
-                unpermitted_facilities_subq.c.county_id == m.County.id,
-            )
-            .group_by(m.County.name)
+    permitted_counts = session.execute(
+        sa.select(
+            m.County.name,
+            sa.func.count(sa.distinct(permitted_facilities_subq.c.id)).label(
+                "permitted_count"
+            ),
+            sa.func.count(sa.distinct(unpermitted_facilities_subq.c.id)).label(
+                "unpermitted_count"
+            ),
         )
+        .select_from(m.County)
+        .outerjoin(
+            permitted_facilities_subq,
+            permitted_facilities_subq.c.county_id == m.County.id,
+        )
+        .outerjoin(
+            unpermitted_facilities_subq,
+            unpermitted_facilities_subq.c.county_id == m.County.id,
+        )
+        .group_by(m.County.name)
     )
-    counts = pd.DataFrame(permitted_counts, columns=["county", "permitted_count", "unpermitted_count"])
+    counts = pd.DataFrame(
+        permitted_counts, columns=["county", "permitted_count", "unpermitted_count"]
+    )
     counts["total_count"] = counts["permitted_count"] + counts["unpermitted_count"]
     counts = counts.sort_values("total_count", ascending=False)
     return counts
-
 
 
 @figure()
@@ -420,31 +420,33 @@ def map_facility_counts_by_county_unpermitted():
 
 @figure()
 def map_facility_locations():
+    session = new_session()
+    counties = session.scalars(sa.select(m.County)).all()
     county_gdf = gpd.GeoDataFrame(
-        County.select(County.name, County.geometry).dicts(),
+        [{"name": county.name, "geometry": county.shp_geometry} for county in counties],
+        geometry="geometry",
         crs="EPSG:4326",
     )
-    facility_gdf = gpd.GeoDataFrame(
-        Facility.select(
-            Facility.id,
-            Facility.longitude,
-            Facility.latitude,
-            FacilityPermittedLocation.id.is_null(False).alias("permitted"),
-        )
-        .join(
-            FacilityPermittedLocation,
-            pw.JOIN.LEFT_OUTER,
-        )
-        .dicts()
+    permitted_ids = {f.id for f in session.scalars(cacafo.query.permitted_cafos())}
+    cafos = session.scalars(
+        cacafo.query.cafos().options(sa.orm.Load(m.Facility).raiseload("*"))
     )
-    facility_gdf["geometry"] = gpd.points_from_xy(
-        facility_gdf["longitude"],
-        facility_gdf["latitude"],
+    facility_gdf = gpd.GeoDataFrame(
+        [
+            {
+                "id": facility.id,
+                "latitude": facility.shp_geometry.centroid.y,
+                "longitude": facility.shp_geometry.centroid.x,
+                "permitted": facility.id in permitted_ids,
+                "geometry": facility.shp_geometry.centroid,
+            }
+            for facility in cafos
+        ]
     )
     facility_gdf.crs = "EPSG:4326"
 
     facility_gdf["plot_permit"] = facility_gdf["permitted"].apply(
-        lambda x: "Permit within 1km" if x else "No permit within 1km"
+        lambda x: "Permit <1km" if x else "No Permit <1km"
     )
 
     base = facility_gdf.plot(
@@ -452,12 +454,12 @@ def map_facility_locations():
         legend=True,
         markersize=0.07,
         marker="o",
-        alpha=0.1,
+        alpha=0.2,
         categorical=True,
         cmap="Set2",
         vmin=0,
         vmax=8,
-        categories=["Permit within 1km", "No permit within 1km"],
+        categories=["Permit <1km", "No Permit <1km"],
         legend_kwds={
             "fontsize": 6,
             "markerscale": 0.5,
@@ -584,36 +586,32 @@ def labeling():
 
 @table()
 def tf_idf_examples():
-    ranges = zip(range(0, 1000, 50), range(50, 1000, 50))
-    rows = []
-    for low, high in ranges:
-        OtherBuilding = Building.alias()
-        OtherParcel = Parcel.alias()
-        examples = (
-            BuildingRelationship.select(
-                BuildingRelationship.weight.alias("weight"),
-                Parcel.owner.alias("owner_1"),
-                OtherParcel.owner.alias("owner_2"),
+    session = new_session()
+    related_building = sa.orm.aliased(m.Building)
+    other_parcel = sa.orm.aliased(m.Parcel)
+    tfidf_relationships = (
+        session.execute(
+            sa.select(
+                m.BuildingRelationship.weight.label("weight"),
+                m.Parcel.owner.label("owner_1"),
+                other_parcel.owner.label("owner_2"),
             )
-            .join(Building, on=(Building.id == BuildingRelationship.building))
+            .select_from(m.BuildingRelationship)
+            .join(m.Building, (m.Building.id == m.BuildingRelationship.building_id))
             .join(
-                OtherBuilding,
-                on=(OtherBuilding.id == BuildingRelationship.other_building),
+                related_building,
+                (related_building.id == m.BuildingRelationship.related_building_id),
             )
-            .join(Parcel, on=(Parcel.id == Building.parcel))
-            .join(OtherParcel, on=(OtherParcel.id == OtherBuilding.parcel))
-            .where(
-                (BuildingRelationship.reason == "parcel name tf-idf")
-                & (BuildingRelationship.weight >= low)
-                & (BuildingRelationship.weight < high)
-            )
+            .join(m.Parcel, (m.Parcel.id == m.Building.parcel_id))
+            .join(other_parcel, (other_parcel.id == related_building.parcel_id))
+            .where(m.BuildingRelationship.reason == "tfidf")
+            .order_by(m.BuildingRelationship.weight.desc())
             .distinct()
-            .limit(1)
-            .dicts()
         )
-        rows.extend(examples)
-    rows = sorted(rows, key=lambda x: x["weight"])
-    df = pd.DataFrame(rows)
+        .mappings()
+        .all()
+    )
+    df = pd.DataFrame(tfidf_relationships)
     df = df.rename(
         columns={
             "weight": "TF-IDF Weight",
@@ -623,41 +621,45 @@ def tf_idf_examples():
     )
     df["Owner 1"] = df["Owner 1"].apply(lambda x: x.replace("&", r"\&"))
     df["Owner 2"] = df["Owner 2"].apply(lambda x: x.replace("&", r"\&"))
-    return df
+    ranges = zip(range(0, 1000, 50), range(50, 1000, 50))
+    # sample one example from each range
+    rows = []
+    for low, high in ranges:
+        example = df[(df["TF-IDF Weight"] >= low) & (df["TF-IDF Weight"] < high)].iloc[
+            0
+        ]
+        rows.append(example)
+    return pd.DataFrame(rows)
 
 
 @table()
 def fuzzy_examples():
-    ranges = zip(range(0, 1000, 50), range(50, 1000, 50))
-    rows = []
-    for low, high in ranges:
-        OtherBuilding = Building.alias()
-        OtherParcel = Parcel.alias()
-        examples = (
-            BuildingRelationship.select(
-                BuildingRelationship.weight.alias("weight"),
-                Parcel.owner.alias("owner_1"),
-                OtherParcel.owner.alias("owner_2"),
+    session = new_session()
+    related_building = sa.orm.aliased(m.Building)
+    other_parcel = sa.orm.aliased(m.Parcel)
+    fuzzy_relationships = (
+        session.execute(
+            sa.select(
+                m.BuildingRelationship.weight.label("weight"),
+                m.Parcel.owner.label("owner_1"),
+                other_parcel.owner.label("owner_2"),
             )
-            .join(Building, on=(Building.id == BuildingRelationship.building))
+            .select_from(m.BuildingRelationship)
+            .join(m.Building, (m.Building.id == m.BuildingRelationship.building_id))
             .join(
-                OtherBuilding,
-                on=(OtherBuilding.id == BuildingRelationship.other_building),
+                related_building,
+                (related_building.id == m.BuildingRelationship.related_building_id),
             )
-            .join(Parcel, on=(Parcel.id == Building.parcel))
-            .join(OtherParcel, on=(OtherParcel.id == OtherBuilding.parcel))
-            .where(
-                (BuildingRelationship.reason == "parcel name fuzzy")
-                & (BuildingRelationship.weight >= low)
-                & (BuildingRelationship.weight < high)
-            )
-            .limit(1)
+            .join(m.Parcel, (m.Parcel.id == m.Building.parcel_id))
+            .join(other_parcel, (other_parcel.id == related_building.parcel_id))
+            .where(m.BuildingRelationship.reason == "fuzzy")
+            .order_by(m.BuildingRelationship.weight.desc())
             .distinct()
-            .dicts()
         )
-        rows.extend(examples)
-    rows = sorted(rows, key=lambda x: x["weight"])
-    df = pd.DataFrame(rows)
+        .mappings()
+        .all()
+    )
+    df = pd.DataFrame(fuzzy_relationships)
     df = df.rename(
         columns={
             "weight": "Fuzzy Weight",
@@ -667,37 +669,27 @@ def fuzzy_examples():
     )
     df["Owner 1"] = df["Owner 1"].apply(lambda x: x.replace("&", r"\&"))
     df["Owner 2"] = df["Owner 2"].apply(lambda x: x.replace("&", r"\&"))
-    return df
+    ranges = zip(range(0, 1000, 50), range(50, 1000, 50))
+    # sample one example from each range
+    rows = []
+    for low, high in ranges:
+        example = df[(df["Fuzzy Weight"] >= low) & (df["Fuzzy Weight"] < high)].iloc[0]
+        rows.append(example)
+    return pd.DataFrame(rows)
 
 
 @table()
 def parcel_name_overrides():
-    OtherBuilding = Building.alias()
-    OtherParcel = Parcel.alias()
-    overrides = (
-        BuildingRelationship.select(
-            Parcel.owner.alias("owner_1"),
-            OtherParcel.owner.alias("owner_2"),
+    session = new_session()
+    rows = (
+        session.scalars(
+            sa.select(m.ParcelOwnerNameAnnotation).where(
+                m.ParcelOwnerNameAnnotation.matched == True
+            )
         )
-        .join(Building, on=(Building.id == BuildingRelationship.building))
-        .join(
-            OtherBuilding,
-            on=(OtherBuilding.id == BuildingRelationship.other_building),
-        )
-        .join(Parcel, on=(Parcel.id == Building.parcel))
-        .join(OtherParcel, on=(OtherParcel.id == OtherBuilding.parcel))
-        .where((BuildingRelationship.reason == "parcel name annotation"))
-        .distinct()
-        .dicts()
+        .all()
     )
-    pairs = {tuple(sorted((o["owner_1"], o["owner_2"]))) for o in overrides}
-    df = pd.DataFrame(pairs, columns=["Owner 1", "Owner 2"])
-    df = df.rename(
-        columns={
-            "owner_1": "Owner 1",
-            "owner_2": "Owner 2",
-        }
-    )
+    df = pd.DataFrame([{"Owner 1": row.owner_name, "Owner 2": row.related_owner_name} for row in rows])
     df["Owner 1"] = df["Owner 1"].apply(lambda x: x.replace("&", r"\&"))
     df["Owner 2"] = df["Owner 2"].apply(lambda x: x.replace("&", r"\&"))
     return df
