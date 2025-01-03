@@ -1,17 +1,8 @@
-import pathlib
-
 import networkx as nx
 import sqlalchemy as sa
 
 import cacafo.db.models as m
 from cacafo.db.session import new_session
-
-BUILDING_THRESHOLD_RELATIONSHIP_QUERY_PATH = (
-    pathlib.Path(__file__).parent / "building_threshold_relationship_query.sql"
-)
-BUILDING_THRESHOLD_RELATIONSHIP_QUERY = (
-    BUILDING_THRESHOLD_RELATIONSHIP_QUERY_PATH.read_text()
-)
 
 
 class MemoryBuildingRelationships:
