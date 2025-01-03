@@ -648,7 +648,7 @@ def facility_set(**kwargs):
     return [frozenset(f) for f in building_clusters(**kwargs)]
 
 
-@figure()
+# @figure()
 def facility_matching_parameters():
     plt.figure(figsize=(7, 2.5))
     ax = plt.subplot(1, 3, 1)
@@ -703,8 +703,11 @@ def permit_sensitivity_analysis():
         data.append(
             {
                 "distance": distance,
-                "n_clean_matches": facility_parcel_then_distance_matches(
-                    distance=distance
+                "n_clean_matches": sum(
+                    len(v)
+                    for v in facility_parcel_then_distance_matches(
+                        distance=distance
+                    ).values()
                 ),
             }
         )
