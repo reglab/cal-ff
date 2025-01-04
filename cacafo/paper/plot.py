@@ -648,7 +648,7 @@ def facility_set(**kwargs):
     return [frozenset(f) for f in building_clusters(**kwargs)]
 
 
-# @figure()
+@figure()
 def facility_matching_parameters():
     plt.figure(figsize=(7, 2.5))
     ax = plt.subplot(1, 3, 1)
