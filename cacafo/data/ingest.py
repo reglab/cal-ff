@@ -146,11 +146,15 @@ def parcel(session, file_path=None):
     with open(path) as f:
         reader = csv.DictReader(f)
         for line in rich.progress.track(reader, description="Ingesting parcels"):
+            data = json.loads(line["data"])
+            if isinstance(data, str):
+                # some data is double-quoted bc of json->csv
+                data = json.loads(data)
             parcel = m.Parcel(
                 owner=line["owner"],
                 address=line["address"],
                 number=line["numb"],
-                data=line,
+                data=data,
                 inferred_geometry=None,
                 county_id=county_name_to_id[line["county_name"]],
             )
@@ -208,7 +212,7 @@ def parcel(session, file_path=None):
         points_in_meters = cacafo.transform.to_meters(parcel.inferred_geometry)
         buffer = points_in_meters.buffer(5)
         convex_hull = buffer.convex_hull
-        parcel.inferred_geometry = cacafo.transform.to_latlon(convex_hull)
+        parcel.inferred_geometry = cacafo.transform.to_wgs(convex_hull)
 
         assert shp.geometry.shape(parcel.inferred_geometry).is_valid
         assert shp.geometry.shape(parcel.inferred_geometry).contains(original_geometry)

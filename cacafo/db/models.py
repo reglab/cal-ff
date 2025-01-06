@@ -742,6 +742,36 @@ class Facility(PublicBase):
             [self.to_geojson_feature()], crs="EPSG:4326"
         )
 
+    @property
+    def census_tract(self):
+        from collections import Counter
+
+        counter = Counter(
+            [
+                building.parcel.data.get("census_tract")
+                for building in self.buildings
+                if building.parcel
+            ]
+        )
+        if not counter:
+            return None
+        return counter.most_common(1)[0][0]
+
+    @property
+    def census_blockgroup(self):
+        from collections import Counter
+
+        counter = Counter(
+            [
+                building.parcel.data.get("census_blockgroup")
+                for building in self.buildings
+                if building.parcel
+            ]
+        )
+        if not counter:
+            return None
+        return counter.most_common(1)[0][0]
+
 
 class UrbanMask(PublicBase):
     __tablename__ = "urban_mask"
