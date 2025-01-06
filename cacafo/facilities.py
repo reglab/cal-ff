@@ -196,36 +196,37 @@ def join_construction_annotations(session=None):
 
 def join_facility_counties(session=None):
     session = session or new_session()
-    facility_counties = session.execute(
-        sa.select(m.Facility, m.Parcel.county_id)
-        .join(m.Building, m.Facility.id == m.Building.facility_id)
-        .join(m.Parcel, m.Building.parcel_id == m.Parcel.id)
-        .where(m.Facility.archived_at.is_(None))
-    ).all()
-
-    county_id_map = {
-        county.id: county
-        for county in session.execute(sa.select(m.County)).scalars().all()
-    }
-
-    facility_counties_dict = {}
-    for facility, county_id in rich.progress.track(
-        facility_counties, description="Processing facility counties"
-    ):
-        if facility.id in facility_counties_dict:
-            facility_counties_dict[facility.id][county_id] = (
-                facility_counties_dict[facility.id].get(county_id, 0) + 1
-            )
-        else:
-            facility_counties_dict[facility.id] = {county_id: 1}
-
-    for facility_id, counties in facility_counties_dict.items():
-        county_id = max(counties, key=counties.get)
+    facility_counties = (
         session.execute(
-            sa.update(m.Facility)
-            .where(m.Facility.id == facility_id)
-            .values(county_id=county_id_map[county_id].id)
+            sa.select(m.Facility)
+            .options(
+                sa.orm.joinedload(m.Facility.all_buildings)
+                .joinedload(m.Building.parcel)
+                .raiseload("*")
+            )
+            .where(m.Facility.archived_at.is_(None))
         )
+        .unique()
+        .scalars()
+        .all()
+    )
+    for facility in facility_counties:
+        counties = {}
+        for building in facility.buildings:
+            if building.parcel:
+                building_county_id = building.parcel.county_id
+            else:
+                building_county_id = m.County.geocode(
+                    session,
+                    lon=building.shp_geometry.centroid.x,
+                    lat=building.shp_geometry.centroid.y,
+                ).id
+            if building_county_id:
+                counties[building_county_id] = counties.get(building_county_id, 0) + 1
+            else:
+                raise ValueError(f"Could not geocode building {building.id}")
+        facility.county_id = max(counties, key=counties.get)
+        session.add(facility)
 
 
 @click.group("facilities")

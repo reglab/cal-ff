@@ -26,7 +26,9 @@ class PublicBase(Base):
     def shp_geometry(self):
         if not hasattr(self, "geometry"):
             raise AttributeError(f"Class {self.__class__} has no geometry attribute")
-        return ga.shape.to_shape(self.geometry)
+        if not hasattr(self, "_shp_geometry"):
+            self._shp_geometry = ga.shape.to_shape(self.geometry)
+        return self._shp_geometry
 
     @property
     def shp_location(self):
@@ -79,9 +81,10 @@ class County(PublicBase):
         if None in (lon, lat):
             raise ValueError("None values given to geocode")
         point = wkt.loads(f"POINT({lon} {lat})")
-        counties = session.query(cls).all()
-        for county in counties:
-            if county.geometry.contains(point):
+        if not hasattr(cls, "_COUNTIES"):
+            cls._COUNTIES = session.query(cls).all()
+        for county in cls._COUNTIES:
+            if county.shp_geometry.contains(point):
                 return county
         raise ValueError(f"No county found for point {point}")
 

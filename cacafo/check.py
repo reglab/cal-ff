@@ -545,6 +545,19 @@ def completeness_lower_bound(verbose=False):
     return survey.completeness().lower
 
 
+@check(expected=0)
+def facilities_without_counties(verbose=False):
+    session = new_session()
+    query = sa.select(m.Facility).where(
+        m.Facility.county.is_(None) & m.Facility.archived_at.is_(None)
+    )
+    results = session.execute(query).unique().scalars().all()
+    for result in results:
+        if verbose:
+            rich.print(f"[yellow]Facility {result.id} is missing a county[/yellow]")
+    return len(results)
+
+
 @click.command("check", help="Run data validation checks.")
 @click.option(
     "--verbose",
