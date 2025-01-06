@@ -620,6 +620,8 @@ class Facility(PublicBase):
                 if self.construction_annotation
                 else None
             ),
+            "census_tract": self.census_tract,
+            "census_blockgroup": self.census_blockgroup,
         }
         feature["bbox"] = list(geom.bounds)
         return feature
