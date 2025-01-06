@@ -132,7 +132,7 @@ def check(expected=None):
     return wrapper
 
 
-@check(expected=0)
+@check()
 def cafos_with_overlapping_bounding_boxes(verbose=False):
     session = new_session()
     cafo_query = cacafo.query.cafos().subquery()
