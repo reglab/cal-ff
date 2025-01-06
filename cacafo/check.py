@@ -132,7 +132,7 @@ def check(expected=None):
     return wrapper
 
 
-@check(expected=0)
+@check()
 def cafos_with_overlapping_bounding_boxes(verbose=False):
     session = new_session()
     cafo_query = cacafo.query.cafos().subquery()
@@ -543,6 +543,19 @@ def completeness_estimate(verbose=False):
 def completeness_lower_bound(verbose=False):
     survey = cacafo.stats.population.Survey.from_db()
     return survey.completeness().lower
+
+
+@check(expected=0)
+def facilities_without_counties(verbose=False):
+    session = new_session()
+    query = sa.select(m.Facility).where(
+        m.Facility.county.is_(None) & m.Facility.archived_at.is_(None)
+    )
+    results = session.execute(query).unique().scalars().all()
+    for result in results:
+        if verbose:
+            rich.print(f"[yellow]Facility {result.id} is missing a county[/yellow]")
+    return len(results)
 
 
 @click.command("check", help="Run data validation checks.")

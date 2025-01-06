@@ -7,6 +7,7 @@ import shapely as shp
 import shapely.ops
 import sqlalchemy as sa
 
+import cacafo.cluster.permits
 import cacafo.db.models as m
 from cacafo.cluster.buildings import building_clusters
 from cacafo.db.session import new_session
@@ -62,127 +63,27 @@ def join_facilities():
 
 def join_permits(session=None):
     session = session or new_session()
-
-    # Join facilities with permits based on parcels
-    GeocodedParcel = sa.orm.aliased(m.Parcel)
-    RegisteredParcel = sa.orm.aliased(m.Parcel)
-    GeocodedBuilding = sa.orm.aliased(m.Building)
-    RegisteredBuilding = sa.orm.aliased(m.Building)
-    GeocodedFacility = sa.orm.aliased(m.Facility)
-    RegisteredFacility = sa.orm.aliased(m.Facility)
-    parcel_permit_joins = (
-        session.execute(
-            sa.select(m.Permit)
-            .join(
-                RegisteredParcel,
-                m.Permit.registered_location_parcel_id == RegisteredParcel.id,
-            )
-            .join(
-                GeocodedParcel,
-                m.Permit.geocoded_address_location_parcel_id == GeocodedParcel.id,
-            )
-            .join(
-                RegisteredBuilding,
-                RegisteredParcel.id == RegisteredBuilding.parcel_id,
-            )
-            .join(
-                GeocodedBuilding,
-                GeocodedParcel.id == GeocodedBuilding.parcel_id,
-            )
-            .join(
-                RegisteredFacility,
-                RegisteredBuilding.facility_id == RegisteredFacility.id,
-            )
-            .join(
-                GeocodedFacility,
-                GeocodedBuilding.facility_id == GeocodedFacility.id,
-            )
-            .where(
-                (m.Permit.registered_location.isnot(None))
-                & (m.Permit.geocoded_address_location.isnot(None))
-                & (RegisteredFacility.id == GeocodedFacility.id)
-            )
-            .distinct(m.Permit.id)
-        )
-        .scalars()
-        .all()
-    )
-
-    # Update facility_id for matched permits
-    for permit in parcel_permit_joins:
-        permit.facility_id = permit.registered_location_parcel.buildings[0].facility_id
-    session.add_all(parcel_permit_joins)
-    session.flush()
-
-    # make a strtree of facilities
-    facilities = list(
-        session.execute(sa.select(m.Facility).where(m.Facility.archived_at.is_(None)))
-        .scalars()
-        .all()
-    )
-    permits = list(
-        session.execute(sa.select(m.Permit).where(m.Permit.facility_id.is_(None)))
-        .scalars()
-        .all()
-    )
-
-    facility_geoms = [
-        to_meters(ga.shape.to_shape(facility.geometry)) for facility in facilities
-    ]
-    permit_geocoded_address_geoms = [
-        permit.geocoded_address_location
-        and to_meters(ga.shape.to_shape(permit.geocoded_address_location))
-        for permit in permits
-    ]
-    permit_registered_location_geoms = [
-        permit.registered_location
-        and to_meters(ga.shape.to_shape(permit.registered_location))
-        for permit in permits
-    ]
-
-    facility_strtree = shp.STRtree(facility_geoms)
-    # returns input indices, then tree indices
-    geocoded_address_matches = facility_strtree.query(
-        permit_geocoded_address_geoms,
-        predicate="dwithin",
-        distance=200,
-    )
-    geocoded_matches = {}
-    for permit_idx, facility_idx in zip(*geocoded_address_matches):
-        geocoded_matches[permit_idx] = geocoded_matches.get(permit_idx, set()) | {
-            facility_idx
-        }
-    registered_location_matches = facility_strtree.query(
-        permit_registered_location_geoms,
-        predicate="dwithin",
-        distance=200,
-    )
-    registered_matches = {}
-    for permit_idx, facility_idx in zip(*registered_location_matches):
-        registered_matches[permit_idx] = registered_matches.get(permit_idx, set()) | {
-            facility_idx
-        }
-
-    both_matches = {
-        k: v & geocoded_matches.get(k, set()) for k, v in registered_matches.items()
+    session.execute(sa.update(m.Permit).values(facility_id=None))
+    permits = {
+        permit.id: permit
+        for permit in session.execute(sa.select(m.Permit)).scalars().all()
     }
-    permits_to_update = []
-    for permit_id, matched_facilities in both_matches.items():
-        if len(matched_facilities) == 1:
-            permit = permits[permit_id]
-            facility = facilities[matched_facilities.pop()]
-            permit.facility_id = facility.id
-            permits_to_update.append(permit)
-    session.add_all(permits_to_update)
+    facility_id_to_permit_ids = (
+        cacafo.cluster.permits.facility_parcel_then_distance_matches(session=session)
+    )
+    permit_id_to_facility_id = {
+        permit_id: facility_id
+        for facility_id, permit_ids in facility_id_to_permit_ids.items()
+        for permit_id in permit_ids
+    }
+    for permit_id, facility_id in permit_id_to_facility_id.items():
+        permit = permits[permit_id]
+        permit.facility_id = facility_id
+        session.add(permit)
     session.flush()
     session.commit()
-    # Print summary
     click.secho(
-        f"Joined {len(parcel_permit_joins)} permits to facilities based on parcels",
-        fg="green",
-    )
-    click.secho(
-        f"Joined {len(permits_to_update)} permits to facilities based on distance",
+        f"Joined {len(permit_id_to_facility_id)} permits to facilities",
         fg="green",
     )
 
@@ -295,36 +196,37 @@ def join_construction_annotations(session=None):
 
 def join_facility_counties(session=None):
     session = session or new_session()
-    facility_counties = session.execute(
-        sa.select(m.Facility, m.Parcel.county_id)
-        .join(m.Building, m.Facility.id == m.Building.facility_id)
-        .join(m.Parcel, m.Building.parcel_id == m.Parcel.id)
-        .where(m.Facility.archived_at.is_(None))
-    ).all()
-
-    county_id_map = {
-        county.id: county
-        for county in session.execute(sa.select(m.County)).scalars().all()
-    }
-
-    facility_counties_dict = {}
-    for facility, county_id in rich.progress.track(
-        facility_counties, description="Processing facility counties"
-    ):
-        if facility.id in facility_counties_dict:
-            facility_counties_dict[facility.id][county_id] = (
-                facility_counties_dict[facility.id].get(county_id, 0) + 1
-            )
-        else:
-            facility_counties_dict[facility.id] = {county_id: 1}
-
-    for facility_id, counties in facility_counties_dict.items():
-        county_id = max(counties, key=counties.get)
+    facility_counties = (
         session.execute(
-            sa.update(m.Facility)
-            .where(m.Facility.id == facility_id)
-            .values(county_id=county_id_map[county_id].id)
+            sa.select(m.Facility)
+            .options(
+                sa.orm.joinedload(m.Facility.all_buildings)
+                .joinedload(m.Building.parcel)
+                .raiseload("*")
+            )
+            .where(m.Facility.archived_at.is_(None))
         )
+        .unique()
+        .scalars()
+        .all()
+    )
+    for facility in facility_counties:
+        counties = {}
+        for building in facility.buildings:
+            if building.parcel:
+                building_county_id = building.parcel.county_id
+            else:
+                building_county_id = m.County.geocode(
+                    session,
+                    lon=building.shp_geometry.centroid.x,
+                    lat=building.shp_geometry.centroid.y,
+                ).id
+            if building_county_id:
+                counties[building_county_id] = counties.get(building_county_id, 0) + 1
+            else:
+                raise ValueError(f"Could not geocode building {building.id}")
+        facility.county_id = max(counties, key=counties.get)
+        session.add(facility)
 
 
 @click.group("facilities")
@@ -347,7 +249,7 @@ def create_facilities_cli():
 @_cli.command("join", help="Join annotations to facilities")
 @click.option(
     "--type",
-    type=click.Choice(["all", "cafo", "animal_type", "construction"]),
+    type=click.Choice(["all", "cafo", "animal_type", "construction", "permits"]),
     default="all",
     help="Type(s) of annotation to join",
 )
@@ -361,6 +263,8 @@ def join_facilities_cli(type: str):
             join_animal_type_annotations()
         case "construction":
             join_construction_annotations()
+        case "permits":
+            join_permits()
         case _:
             raise ValueError(f"Invalid type: {type}")
     click.echo(f"Joined {type} annotations to facilities")

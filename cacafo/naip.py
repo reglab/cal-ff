@@ -6,6 +6,7 @@ import diskcache as dc
 import rasterio
 import rasterio.merge
 import rich_click as click
+import shapely as shp
 from google.auth.exceptions import DefaultCredentialsError
 from google.cloud import storage
 from rasterio.crs import CRS
@@ -72,11 +73,18 @@ def download_ca_cafo_naip_image(image_name, format_: Format = Format.JPEG):
 
 
 def add_basemap(ax):
+    from cacafo.db.session import new_session
+
+    session = new_session()
+
     @dc_cache.memoize()
     def get_images_for_area(xmin, ymin, xmax, ymax):
         from cacafo.db.models import Image as mImage
 
-        return mImage.get_images_for_area(xmin, ymin, xmax, ymax)
+        nonlocal session
+        return mImage.get_images_for_area(
+            shp.Polygon.from_bounds(xmin, ymin, xmax, ymax), session
+        )
 
     xmin, xmax, ymin, ymax = ax.axis()
     # project from 3311 to 4326 if necessary

@@ -26,7 +26,9 @@ class PublicBase(Base):
     def shp_geometry(self):
         if not hasattr(self, "geometry"):
             raise AttributeError(f"Class {self.__class__} has no geometry attribute")
-        return ga.shape.to_shape(self.geometry)
+        if not hasattr(self, "_shp_geometry"):
+            self._shp_geometry = ga.shape.to_shape(self.geometry)
+        return self._shp_geometry
 
     @property
     def shp_location(self):
@@ -79,9 +81,10 @@ class County(PublicBase):
         if None in (lon, lat):
             raise ValueError("None values given to geocode")
         point = wkt.loads(f"POINT({lon} {lat})")
-        counties = session.query(cls).all()
-        for county in counties:
-            if county.geometry.contains(point):
+        if not hasattr(cls, "_COUNTIES"):
+            cls._COUNTIES = session.query(cls).all()
+        for county in cls._COUNTIES:
+            if county.shp_geometry.contains(point):
                 return county
         raise ValueError(f"No county found for point {point}")
 
@@ -250,7 +253,8 @@ class Image(PublicBase):
     @classmethod
     def get_images_for_area(cls, geometry: shp.geometry.base.BaseGeometry, session):
         query = sa.select(cls).where(
-            cls.geometry.intersects(geometry) & cls.label_status != "removed"
+            sa.func.ST_Intersects(cls.geometry, geometry.wkt)
+            & (cls.label_status != "removed")
         )
         return session.execute(query).scalars().all()
 
@@ -669,6 +673,15 @@ class Facility(PublicBase):
         return set()
 
     @property
+    def animal_type_str(self):
+        if len(self.animal_types) == 1:
+            return self.animal_types.pop()
+        # choose most specific type
+        if set(self.animal_types) == {"cattle", "dairy"}:
+            return "dairy"
+        return "two or more"
+
+    @property
     def animal_type_source(self):
         annotated_types = set(
             [
@@ -720,6 +733,44 @@ class Facility(PublicBase):
     @property
     def parcels(self):
         return [building.parcel for building in self.buildings if building.parcel]
+
+    @property
+    def gdf(self):
+        import geopandas as gpd
+
+        return gpd.GeoDataFrame.from_features(
+            [self.to_geojson_feature()], crs="EPSG:4326"
+        )
+
+    @property
+    def census_tract(self):
+        from collections import Counter
+
+        counter = Counter(
+            [
+                building.parcel.data.get("census_tract")
+                for building in self.buildings
+                if building.parcel
+            ]
+        )
+        if not counter:
+            return None
+        return counter.most_common(1)[0][0]
+
+    @property
+    def census_blockgroup(self):
+        from collections import Counter
+
+        counter = Counter(
+            [
+                building.parcel.data.get("census_blockgroup")
+                for building in self.buildings
+                if building.parcel
+            ]
+        )
+        if not counter:
+            return None
+        return counter.most_common(1)[0][0]
 
 
 class UrbanMask(PublicBase):
