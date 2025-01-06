@@ -80,6 +80,8 @@ def annotation(name_1, name_2):
         )
         session = new_session()
         result = session.execute(query).scalars().all()
-        _MATCHED_OWNER_NAMES = {r.owner_name: r.related_owner_name for r in result}
+        _MATCHED_OWNER_NAMES = {r.owner_name: r.related_owner_name for r in result} | {
+            r.related_owner_name: r.owner_name for r in result
+        }
     result = _MATCHED_OWNER_NAMES.get(name_1, name_1) == name_2
     return 1000 if result else 0
