@@ -579,9 +579,20 @@ def removed_facilities_dating(session):
     return "{:,}".format(n_facilities_removed)
 
 
+"""
+SELECT facility.id
+FROM facility
+    LEFT OUTER JOIN cafo_annotation
+    ON facility.id = cafo_annotation.facility_id
+    WHERE facility.archived_at IS NULL
+GROUP BY facility.id, cafo_annotation.annotation_phase, facility.id
+HAVING sum(CAST(cafo_annotation.is_cafo AS INTEGER)) < count(cafo_annotation.id) AND count(cafo_annotation.id) != :count_1 AND count(cafo_annotation.annotation_phase) = :count_2
+"""
+
+
 def removed_facilities_both(session):
-    facilities_removed = (
-        sa.select(m.Facility.id)
+    facilities_removed_either = (
+        sa.select(m.Facility.id, m.CafoAnnotation.annotation_phase)
         .select_from(m.Facility)
         .join(m.CafoAnnotation, isouter=True)
         .group_by(m.Facility.id, m.CafoAnnotation.annotation_phase)
@@ -592,14 +603,21 @@ def removed_facilities_both(session):
             )
             & (sa.func.count(m.CafoAnnotation.id) != 0)
         )
-        .group_by(m.Facility.id)
-        .having(sa.func.count(m.CafoAnnotation.annotation_phase) == 2)
         .where(m.Facility.archived_at.is_(None))
+        .subquery()
+    )
+    facilities_removed = (
+        sa.select(facilities_removed_either.c.id)
+        .select_from(facilities_removed_either)
+        .group_by(facilities_removed_either.c.id)
+        .having(
+            sa.func.count(facilities_removed_either.c.annotation_phase.distinct()) == 2
+        )
         .subquery()
     )
     n_facilities_removed = (
         session.execute(
-            sa.select(sa.func.count(facilities_removed.c.id)).select_from(
+            sa.select(sa.func.count(facilities_removed.c.id.distinct())).select_from(
                 facilities_removed
             )
         )
