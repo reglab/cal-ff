@@ -480,6 +480,52 @@ def irr(session):
     return "{:.2f}".format(cacafo.stats.irr.label_balanced_cohens_kappa(session))
 
 
+@constant_method
+def agreement_pct_dating(session):
+    pass
+
+
+@constant_method
+def removed_buildings_dating(session):
+    pass
+
+
+@constant_method
+def removed_facilities_dating(session):
+    n_facilities = (
+        session.execute(
+            sa.select(sa.func.count(m.Facility.id))
+            .select_from(m.Facility)
+            .join(m.ConstructionAnnotation)
+            .where(m.Facility)
+        )
+        .scalars()
+        .one()
+        or 0
+    )
+    return "{:,}".format(n_facilities)
+
+
+@constant_method
+def removed_facilities_typing(session):
+    pass
+
+
+@constant_method
+def removed_pct_typing(session):
+    pass
+
+
+"""
+\newcommand{\agreementpctdating}{86\%} %pct of labeled buildings not removed in dating procedure
+\newcommand{\removedbuildingsdating}{4,648}
+\newcommand{\partiallyremovedfacilitiesdating}{677}
+\newcommand{\removedfacilitiesdating}{597}
+\newcommand{\removedfacilitiestyping}{47}
+\newcommand{\removedpcttyping}{2\%}
+"""
+
+
 @click.command("constants", help="Write all paper constants to file.")
 def _cli():
     """Write all variables to file."""
