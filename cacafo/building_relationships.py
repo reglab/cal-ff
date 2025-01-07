@@ -213,17 +213,16 @@ def add_parcel_owner_annotation_relationships(session):
         ):
             continue
 
+        weight = cacafo.owner_name_matching.annotation(
+            building_id_to_parcel_owner_name[building_relationship.building_id],
+            building_id_to_parcel_owner_name[building_relationship.related_building_id],
+        )
         to_create.append(
             m.BuildingRelationship(
                 building_id=building_relationship.building_id,
                 related_building_id=building_relationship.related_building_id,
                 reason="parcel owner annotation",
-                weight=cacafo.owner_name_matching.annotation(
-                    building_id_to_parcel_owner_name[building_relationship.building_id],
-                    building_id_to_parcel_owner_name[
-                        building_relationship.related_building_id
-                    ],
-                ),
+                weight=weight,
             )
         )
         if len(to_create) > 1000:
