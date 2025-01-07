@@ -663,15 +663,6 @@ def removed_pct_typing(session):
     return "{:.2f}\%".format(100 * n_removed / n_total)
 
 
-"""
-\newcommand{\agreementpctdating}{86\%} %pct of labeled buildings not removed in dating procedure
-\newcommand{\removedbuildingsdating}{4,648}
-\newcommand{\removedfacilitiesdating}{597}
-\newcommand{\removedfacilitiestyping}{47}
-\newcommand{\removedpcttyping}{2\%}
-"""
-
-
 @click.command("constants", help="Write all paper constants to file.")
 def _cli():
     """Write all variables to file."""
