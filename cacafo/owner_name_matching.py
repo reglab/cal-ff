@@ -73,6 +73,8 @@ _MATCHED_OWNER_NAMES = None
 
 
 def annotation(name_1, name_2):
+    name_1 = name_1.strip().lower()
+    name_2 = name_2.strip().lower()
     global _MATCHED_OWNER_NAMES
     if not _MATCHED_OWNER_NAMES:
         query = sa.select(m.ParcelOwnerNameAnnotation).where(
@@ -80,8 +82,12 @@ def annotation(name_1, name_2):
         )
         session = new_session()
         result = session.execute(query).scalars().all()
-        _MATCHED_OWNER_NAMES = {r.owner_name: r.related_owner_name for r in result} | {
-            r.related_owner_name: r.owner_name for r in result
+        _MATCHED_OWNER_NAMES = {
+            r.owner_name.strip().lower(): r.related_owner_name.strip().lower()
+            for r in result
+        } | {
+            r.related_owner_name.strip().lower(): r.owner_name.strip().lower()
+            for r in result
         }
     result = _MATCHED_OWNER_NAMES.get(name_1, name_1) == name_2
     return 1000 if result else 0
