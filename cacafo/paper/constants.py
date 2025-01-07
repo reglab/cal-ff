@@ -489,7 +489,7 @@ def removed_pct_dating(session):
 
 @constant_method
 def removed_buildings_dating(session):
-    pass
+    return "-1"
 
 
 @constant_method
