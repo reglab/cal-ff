@@ -351,6 +351,7 @@ class CafoAnnotation(PublicBase):
     annotation_facility_hash: Mapped[str] = mapped_column(sa.String, nullable=True)
     annotated_on: Mapped[datetime] = mapped_column(sa.DateTime)
     annotated_by: Mapped[str] = mapped_column(sa.String, nullable=True)
+    annotation_phase: Mapped[str] = mapped_column(sa.String, nullable=False)
 
     facility_id: Mapped[int] = mapped_column(
         sa.ForeignKey("facility.id"), nullable=True

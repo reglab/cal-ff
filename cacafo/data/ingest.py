@@ -471,6 +471,7 @@ def cafo_annotation(session, file_path=None):
                     annotated_by=line["labeler"],
                     is_cafo=is_cafo,
                     is_afo=is_afo,
+                    annotation_phase="animal typing",
                 )
             )
         session.add_all(cafo_annotations)
@@ -494,6 +495,7 @@ def cafo_annotation(session, file_path=None):
                     is_cafo=line.get("is_cafo").lower() == "true",
                     is_afo=line.get("is_cafo").lower() == "true",
                     annotated_by=line["annotator"],
+                    annotation_phase="construction dating",
                 )
             )
         session.add_all(cafo_annotations)
