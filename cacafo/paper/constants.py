@@ -579,17 +579,6 @@ def removed_facilities_dating(session):
     return "{:,}".format(n_facilities_removed)
 
 
-"""
-SELECT facility.id
-FROM facility
-    LEFT OUTER JOIN cafo_annotation
-    ON facility.id = cafo_annotation.facility_id
-    WHERE facility.archived_at IS NULL
-GROUP BY facility.id, cafo_annotation.annotation_phase, facility.id
-HAVING sum(CAST(cafo_annotation.is_cafo AS INTEGER)) < count(cafo_annotation.id) AND count(cafo_annotation.id) != :count_1 AND count(cafo_annotation.annotation_phase) = :count_2
-"""
-
-
 def removed_facilities_both(session):
     facilities_removed_either = (
         sa.select(m.Facility.id, m.CafoAnnotation.annotation_phase)
