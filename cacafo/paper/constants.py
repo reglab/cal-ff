@@ -482,16 +482,17 @@ def irr(session):
 
 @constant_method
 def agreement_pct_dating(session):
-    pass
+    return "-1"
 
 
 @constant_method
 def removed_buildings_dating(session):
-    pass
+    return "-1"
 
 
 @constant_method
 def removed_facilities_dating(session):
+    return "-1"
     n_facilities = (
         session.execute(
             sa.select(sa.func.count(m.Facility.id))
@@ -508,12 +509,12 @@ def removed_facilities_dating(session):
 
 @constant_method
 def removed_facilities_typing(session):
-    pass
+    return "-1"
 
 
 @constant_method
 def removed_pct_typing(session):
-    pass
+    return "-1"
 
 
 """

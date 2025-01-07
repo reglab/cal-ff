@@ -643,6 +643,34 @@ def parcel_name_overrides():
     return df
 
 
+@table()
+def county_groups():
+    session = new_session()
+    county_groups = (
+        session.execute(
+            sa.select(
+                m.CountyGroup.name.label("County Group"),
+                m.County.name.label("County"),
+            )
+            .select_from(m.CountyGroup)
+            .join(m.County, m.CountyGroup.counties)
+            .order_by(m.CountyGroup.name, m.County.name)
+        )
+        .mappings()
+        .all()
+    )
+    df = pd.DataFrame(county_groups)
+    df = df.groupby("County Group")["County"].apply(list).reset_index()
+    df["n_counties"] = df["County"].apply(len)
+    df = df.sort_values("n_counties", ascending=True)
+    df = df[df["n_counties"] > 1]
+    df = df.drop(columns=["n_counties"])
+    df["Counties"] = df["County"].apply(lambda x: ", ".join(x))
+    df = df.drop(columns=["County"])
+    df["County Group"] = [f"Group {i}" for i, _ in enumerate(df["County Group"], 1)]
+    return df
+
+
 @facility_cluster_cache.memoize()
 def facility_set(**kwargs):
     return [frozenset(f) for f in building_clusters(**kwargs)]
