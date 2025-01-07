@@ -536,11 +536,6 @@ def removed_pct_dating(session):
 
 
 @constant_method
-def removed_buildings_dating(session):
-    return "-1"
-
-
-@constant_method
 def removed_facilities_dating(session):
     facilities = session.execute(
         sa.select(
