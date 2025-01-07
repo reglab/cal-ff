@@ -574,6 +574,37 @@ def removed_facilities_dating(session):
     return "{:,}".format(n_facilities_removed)
 
 
+def removed_facilities_both(session):
+    facilities_removed = (
+        sa.select(m.Facility.id)
+        .select_from(m.Facility)
+        .join(m.CafoAnnotation, isouter=True)
+        .group_by(m.Facility.id, m.CafoAnnotation.annotation_phase)
+        .having(
+            (
+                sa.func.sum(sa.cast(m.CafoAnnotation.is_cafo, sa.Integer))
+                < sa.func.count(m.CafoAnnotation.id)
+            )
+            & (sa.func.count(m.CafoAnnotation.id) != 0)
+        )
+        .group_by(m.Facility.id)
+        .having(sa.func.count(m.CafoAnnotation.annotation_phase) == 2)
+        .where(m.Facility.archived_at.is_(None))
+        .subquery()
+    )
+    n_facilities_removed = (
+        session.execute(
+            sa.select(sa.func.count(facilities_removed.c.id)).select_from(
+                facilities_removed
+            )
+        )
+        .scalars()
+        .one()
+        or 0
+    )
+    return "{:,}".format(n_facilities_removed)
+
+
 @constant_method
 def removed_facilities_typing(session):
     subquery = (
