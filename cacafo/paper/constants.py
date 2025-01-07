@@ -542,35 +542,40 @@ def removed_buildings_dating(session):
 
 @constant_method
 def removed_facilities_dating(session):
-    subquery = (
-        sa.select(m.CafoAnnotation)
-        .where(m.CafoAnnotation.annotation_phase == "construction dating")
-        .subquery()
-    )
-    facilities_removed = (
-        sa.select(m.Facility.id)
-        .select_from(m.Facility)
-        .join(subquery, isouter=True)
+    facilities = session.execute(
+        sa.select(
+            m.Facility,
+            # whether there is a construction dating annotation
+            sa.func.sum(
+                sa.cast(
+                    sa.case(
+                        (
+                            m.CafoAnnotation.annotation_phase == "construction dating",
+                            1,
+                        ),
+                        else_=0,
+                    ),
+                    sa.Integer,
+                )
+            ).label("construction_dating_no_cafo"),
+            sa.func.sum(
+                sa.cast(
+                    sa.case(
+                        (
+                            m.CafoAnnotation.annotation_phase == "animal typing",
+                            1,
+                        ),
+                        else_=0,
+                    ),
+                    sa.Integer,
+                )
+            ).label("animal_typing_no_cafo"),
+        )
+        .join(m.CafoAnnotation)
+        .where(m.Facility.archived_at.is_(None) & m.CafoAnnotation.is_cafo.is_(False))
         .group_by(m.Facility.id)
-        .having(
-            (
-                sa.func.sum(sa.cast(subquery.c.is_cafo, sa.Integer))
-                != sa.func.count(subquery.c.id)
-            )
-            & (sa.func.count(subquery.c.id) != 0)
-        )
-        .where(m.Facility.archived_at.is_(None))
-    ).subquery()
-    n_facilities_removed = (
-        session.execute(
-            sa.select(sa.func.count(facilities_removed.c.id)).select_from(
-                facilities_removed
-            )
-        )
-        .scalars()
-        .one()
-        or 0
     )
+    n_facilities_removed = len([f for f in facilities if f[1]])
     return "{:,}".format(n_facilities_removed)
 
 
@@ -607,35 +612,40 @@ def removed_facilities_both(session):
 
 @constant_method
 def removed_facilities_typing(session):
-    subquery = (
-        sa.select(m.CafoAnnotation)
-        .where(m.CafoAnnotation.annotation_phase == "animal typing")
-        .subquery()
-    )
-    facilities_removed = (
-        sa.select(m.Facility.id)
-        .select_from(m.Facility)
-        .join(subquery, isouter=True)
+    facilities = session.execute(
+        sa.select(
+            m.Facility,
+            # whether there is a construction dating annotation
+            sa.func.sum(
+                sa.cast(
+                    sa.case(
+                        (
+                            m.CafoAnnotation.annotation_phase == "construction dating",
+                            1,
+                        ),
+                        else_=0,
+                    ),
+                    sa.Integer,
+                )
+            ).label("construction_dating_no_cafo"),
+            sa.func.sum(
+                sa.cast(
+                    sa.case(
+                        (
+                            m.CafoAnnotation.annotation_phase == "animal typing",
+                            1,
+                        ),
+                        else_=0,
+                    ),
+                    sa.Integer,
+                )
+            ).label("animal_typing_no_cafo"),
+        )
+        .join(m.CafoAnnotation)
+        .where(m.Facility.archived_at.is_(None) & m.CafoAnnotation.is_cafo.is_(False))
         .group_by(m.Facility.id)
-        .having(
-            (
-                sa.func.sum(sa.cast(subquery.c.is_cafo, sa.Integer))
-                != sa.func.count(subquery.c.id)
-            )
-            & (sa.func.count(subquery.c.id) != 0)
-        )
-        .where(m.Facility.archived_at.is_(None))
-    ).subquery()
-    n_facilities_removed = (
-        session.execute(
-            sa.select(sa.func.count(facilities_removed.c.id)).select_from(
-                facilities_removed
-            )
-        )
-        .scalars()
-        .one()
-        or 0
     )
+    n_facilities_removed = len([f for f in facilities if f[2] and not f[1]])
     return "{:,}".format(n_facilities_removed)
 
 
