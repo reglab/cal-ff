@@ -324,7 +324,7 @@ def permitted_by_animal_type():
 )
 def permitted_by_county():
     sorted_counts = facility_counts_by_county()
-    other = sorted_counts[sorted_counts["permitted_count"] < 50]
+    other = sorted_counts[sorted_counts["total_count"] < 50]
     sorted_counts = sorted_counts[sorted_counts["total_count"] >= 50]
     sorted_counts = pd.concat(
         [
