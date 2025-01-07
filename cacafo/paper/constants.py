@@ -113,7 +113,7 @@ def num_facilities(session):
 def facilities_with_no_close_permit(verbose=False):
     session = new_session()
     no_close_matches = (
-        session.execute(cacafo.query.unpermitted_facilities().select())
+        session.execute(cacafo.query.unpermitted_cafos().select())
         .unique()
         .scalars()
         .all()
