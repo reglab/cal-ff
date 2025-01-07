@@ -481,8 +481,10 @@ def irr(session):
 
 
 @constant_method
-def agreement_pct_dating(session):
-    pass
+def removed_pct_dating(session):
+    n_removed = int(removed_facilities_dating(session).replace(",", ""))
+    n_total = int(total_facilities(session).replace(",", ""))
+    return "{:.2f}\%".format(100 * n_removed / n_total)
 
 
 @constant_method
@@ -492,34 +494,82 @@ def removed_buildings_dating(session):
 
 @constant_method
 def removed_facilities_dating(session):
-    n_facilities = (
+    subquery = (
+        sa.select(m.CafoAnnotation)
+        .where(m.CafoAnnotation.annotation_phase == "construction dating")
+        .subquery()
+    )
+    facilities_removed = (
+        sa.select(m.Facility.id)
+        .select_from(m.Facility)
+        .join(subquery, isouter=True)
+        .group_by(m.Facility.id)
+        .having(
+            (
+                sa.func.sum(sa.cast(subquery.c.is_cafo, sa.Integer))
+                != sa.func.count(subquery.c.id)
+            )
+            & (sa.func.count(subquery.c.id) != 0)
+        )
+        .where(m.Facility.archived_at.is_(None))
+    ).subquery()
+    n_facilities_removed = (
         session.execute(
-            sa.select(sa.func.count(m.Facility.id))
-            .select_from(m.Facility)
-            .join(m.ConstructionAnnotation)
-            .where(m.Facility)
+            sa.select(sa.func.count(facilities_removed.c.id)).select_from(
+                facilities_removed
+            )
         )
         .scalars()
         .one()
         or 0
     )
-    return "{:,}".format(n_facilities)
+    return "{:,}".format(n_facilities_removed)
 
 
 @constant_method
 def removed_facilities_typing(session):
-    pass
+    subquery = (
+        sa.select(m.CafoAnnotation)
+        .where(m.CafoAnnotation.annotation_phase == "animal typing")
+        .subquery()
+    )
+    facilities_removed = (
+        sa.select(m.Facility.id)
+        .select_from(m.Facility)
+        .join(subquery, isouter=True)
+        .group_by(m.Facility.id)
+        .having(
+            (
+                sa.func.sum(sa.cast(subquery.c.is_cafo, sa.Integer))
+                != sa.func.count(subquery.c.id)
+            )
+            & (sa.func.count(subquery.c.id) != 0)
+        )
+        .where(m.Facility.archived_at.is_(None))
+    ).subquery()
+    n_facilities_removed = (
+        session.execute(
+            sa.select(sa.func.count(facilities_removed.c.id)).select_from(
+                facilities_removed
+            )
+        )
+        .scalars()
+        .one()
+        or 0
+    )
+    return "{:,}".format(n_facilities_removed)
 
 
 @constant_method
 def removed_pct_typing(session):
-    pass
+    n_removed = int(removed_facilities_typing(session).replace(",", ""))
+    n_total = int(total_facilities(session).replace(",", ""))
+    return "{:.2f}\%".format(100 * n_removed / n_total)
 
 
 """
 \newcommand{\agreementpctdating}{86\%} %pct of labeled buildings not removed in dating procedure
 \newcommand{\removedbuildingsdating}{4,648}
-\newcommand{\partiallyremovedfacilitiesdating}{677}
 \newcommand{\removedfacilitiesdating}{597}
 \newcommand{\removedfacilitiestyping}{47}
 \newcommand{\removedpcttyping}{2\%}
