@@ -481,6 +481,54 @@ def irr(session):
 
 
 @constant_method
+def irr_positive_images(session):
+    subq = cacafo.query.positive_images().subquery()
+    return "{}".format(
+        session.execute(
+            sa.select(sa.func.count(subq.c.id.distinct())).select_from(subq)
+        )
+        .scalars()
+        .one()
+    )
+
+
+@constant_method
+def irr_labeled_negative_images(session):
+    subq = cacafo.query.labeled_negative_images().subquery()
+    return "{}".format(
+        session.execute(
+            sa.select(sa.func.count(subq.c.id.distinct())).select_from(subq)
+        )
+        .scalars()
+        .one()
+    )
+
+
+@constant_method
+def irr_high_confidence_negative_images(session):
+    subq = cacafo.query.high_confidence_negative_images().subquery()
+    return "{}".format(
+        session.execute(
+            sa.select(sa.func.count(subq.c.id.distinct())).select_from(subq)
+        )
+        .scalars()
+        .one()
+    )
+
+
+@constant_method
+def irr_low_confidence_negative_images(session):
+    subq = cacafo.query.low_confidence_negative_images().subquery()
+    return "{}".format(
+        session.execute(
+            sa.select(sa.func.count(subq.c.id.distinct())).select_from(subq)
+        )
+        .scalars()
+        .one()
+    )
+
+
+@constant_method
 def agreement_pct_dating(session):
     return "-1"
 
