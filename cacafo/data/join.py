@@ -227,7 +227,7 @@ def building_parcel_id(session):
 def building_census_block_id(session):
     click.secho("Joining buildings to parcels...", fg="blue")
     query = (
-        sa.select(m.Building.id, m.CensusBlock.id)
+        sa.select(m.Building.id, sa.func.max(m.CensusBlock.id))
         .select_from(m.Building)
         .join(
             m.CensusBlock,

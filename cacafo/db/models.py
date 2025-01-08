@@ -431,6 +431,7 @@ class Building(PublicBase):
     census_block_id: Mapped[int] = mapped_column(
         sa.ForeignKey("census_block.id"), nullable=True
     )
+    census_block = relationship("CensusBlock", back_populates="buildings")
 
     excluded_at: Mapped[datetime] = mapped_column(sa.DateTime, nullable=True)
     exclude_reason: Mapped[str] = mapped_column(sa.String, nullable=True)
@@ -822,6 +823,10 @@ class CensusBlock(PublicBase):
     pop: Mapped[int] = mapped_column(sa.Integer)
     geometry: Mapped[Geography] = mapped_column(
         Geography("MULTIPOLYGON", srid=DEFAULT_SRID)
+    )
+
+    buildings: Mapped[list["Building"]] = relationship(
+        "Building", back_populates="census_block"
     )
 
 

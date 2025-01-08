@@ -532,7 +532,7 @@ def irr_low_confidence_negative_images(session):
 def removed_pct_dating(session):
     n_removed = int(removed_facilities_dating(session).replace(",", ""))
     n_total = int(total_facilities(session).replace(",", ""))
-    return "{:.2f}\%".format(100 * n_removed / n_total)
+    return "{:.2f}\\%".format(100 * n_removed / n_total)
 
 
 @constant_method
@@ -655,7 +655,7 @@ def removed_facilities_typing(session):
 def removed_pct_typing(session):
     n_removed = int(removed_facilities_typing(session).replace(",", ""))
     n_total = int(total_facilities(session).replace(",", ""))
-    return "{:.2f}\%".format(100 * n_removed / n_total)
+    return "{:.2f}\\%".format(100 * n_removed / n_total)
 
 
 @click.command("constants", help="Write all paper constants to file.")
