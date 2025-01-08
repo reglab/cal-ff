@@ -387,13 +387,17 @@ def construction_annotation(session, file_path=None):
                     location=shp.geometry.Point(
                         float(line["longitude"]), float(line["latitude"])
                     ).wkt,
-                    construction_lower_bound=_get_date(line["construction_lower"]),
-                    construction_upper_bound=_get_date(
-                        line["construction_upper"], round_down=True
+                    construction_lower_bound=_get_date(
+                        line["construction_lower"], round_down=True
                     ),
-                    destruction_lower_bound=_get_date(line["destruction_lower"]),
+                    construction_upper_bound=_get_date(
+                        line["construction_upper"],
+                    ),
+                    destruction_lower_bound=_get_date(
+                        line["destruction_lower"], round_down=True
+                    ),
                     destruction_upper_bound=_get_date(
-                        line["destruction_upper"], round_down=True
+                        line["destruction_upper"],
                     ),
                     significant_population_change=line[
                         "significant_animal_population_change"

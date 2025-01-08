@@ -30,41 +30,36 @@ def exporter(entity: str, format_: str):
 
 @exporter("facilities", "csv")
 def facilities_csv(session: Session, output_path: str):
-    facility_id_to_county = {
-        row.id: m.County.geocode(session, lon=row.longitude, lat=row.latitude).name
-        for row in session.execute(
-            sa.select(
-                m.Facility.id,
-                m.Facility.geometry.ST_X().label("longitude"),
-                m.Facility.geometry.ST_Y().label("latitude"),
+    facilities = (
+        session.execute(
+            cacafo.query.cafos().options(
+                sa.orm.joinedload(m.Facility.all_construction_annotations),
+                sa.orm.joinedload(m.Facility.all_animal_type_annotations),
+                sa.orm.joinedload(m.Facility.best_permits),
+                sa.orm.joinedload(m.Facility.county),
             )
-        ).all()
-    }
-
-    rows = session.execute(
-        sa.select(
-            m.Facility.id.label("facility_id"),
-            m.Facility.hash.label("facility_uuid"),
-            m.Facility.geometry.ST_Centroid().ST_X().label("longitude"),
-            m.Facility.geometry.ST_Centroid().ST_Y().label("latitude"),
-            m.ConstructionAnnotation.id.label("construction_annotation_id"),
-            m.ConstructionAnnotation.construction_lower_bound,
-            m.ConstructionAnnotation.construction_upper_bound,
-            m.ConstructionAnnotation.destruction_lower_bound,
-            m.ConstructionAnnotation.destruction_upper_bound,
-            m.ConstructionAnnotation.significant_population_change,
-            m.ConstructionAnnotation.is_primarily_indoors.label("indoor_outdoor"),
-            m.ConstructionAnnotation.has_lagoon,
         )
-        .join(
-            m.ConstructionAnnotation,
-            m.Facility.id == m.ConstructionAnnotation.facility_id,
-        )
-        .where(m.Facility.archived_at.is_(None))
-    ).all()
-
-    rows = [row._asdict() for row in rows]
-    rows = [{"county": facility_id_to_county[r["facility_id"]], **r} for r in rows]
+        .unique()
+        .scalars()
+        .all()
+    )
+    rows = [
+        {
+            "facility_id": facility.id,
+            "facility_hash": facility.hash,
+            "latitude": facility.shp_geometry.centroid.y,
+            "longitude": facility.shp_geometry.centroid.x,
+            "construction_lower_bound": facility.construction_annotation.construction_lower_bound,
+            "construction_upper_bound": facility.construction_annotation.construction_upper_bound,
+            "destruction_lower_bound": facility.construction_annotation.destruction_lower_bound,
+            "destruction_upper_bound": facility.construction_annotation.destruction_upper_bound,
+            "significant_population_change": facility.construction_annotation.significant_population_change,
+            "indoor_outdoor": facility.construction_annotation.is_primarily_indoors,
+            "has_lagoon": facility.construction_annotation.has_lagoon,
+            "animal_type": facility.animal_type_str,
+        }
+        for facility in tqdm(facilities)
+    ]
 
     with open(output_path, "w", newline="") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=rows[0].keys())
@@ -75,8 +70,7 @@ def facilities_csv(session: Session, output_path: str):
 
 @exporter("facilities", "geojson")
 def export_geojson(session: Session, output_path: str):
-    query = sa.select(m.Facility).where(m.Facility.archived_at.is_(None))
-    facilities = session.execute(query).scalars().all()
+    facilities = session.execute(cacafo.query.cafos()).scalars().all()
     features = [facility.to_geojson_feature() for facility in tqdm(facilities)]
     geojson = {
         "type": "FeatureCollection",
