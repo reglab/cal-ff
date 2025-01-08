@@ -564,7 +564,7 @@ def building(session, file_path=None):
 
 @ingestor(m.UrbanMask)
 def urban_mask(session, file_path=None):
-    path = file_path or get_data_path("source/census_urban_mask_2019")
+    path = file_path or get_data_path("source/census/urban_mask_2019")
     df = gpd.read_file(path)
     df.crs = "EPSG:4326"
     for _, row in rich.progress.track(
@@ -577,6 +577,29 @@ def urban_mask(session, file_path=None):
                 **(
                     {k.lower().strip("10"): row[k] for k in row.keys()}
                     | {"geometry": ga.WKTElement(row["geometry"].wkt, srid=4326)}
+                )
+            )
+        )
+    session.commit()
+
+
+@ingestor(m.CensusBlock)
+def census_block(session, file_path=None):
+    path = file_path or get_data_path("source/census/block_2024")
+    df = gpd.read_file(path)
+    df.crs = "EPSG:4326"
+    for _, row in rich.progress.track(
+        df.iterrows(), description="Ingesting census blocks"
+    ):
+        geom = row["geometry"]
+        if geom.geom_type == "Polygon":
+            geom = shp.geometry.MultiPolygon([geom])
+        geom = ga.WKTElement(geom.wkt, srid=4326)
+        session.add(
+            m.CensusBlock(
+                **(
+                    {k.lower().strip("20"): row[k] for k in row.keys()}
+                    | {"geometry": geom}
                 )
             )
         )

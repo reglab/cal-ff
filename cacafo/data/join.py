@@ -223,6 +223,43 @@ def building_parcel_id(session):
         )
 
 
+@joiner(m.Building.census_block_id)
+def building_census_block_id(session):
+    click.secho("Joining buildings to parcels...", fg="blue")
+    query = (
+        sa.select(m.Building.id, m.CensusBlock.id)
+        .select_from(m.Building)
+        .join(
+            m.CensusBlock,
+            m.Building.geometry.ST_Intersects(m.CensusBlock.geometry),
+        )
+        .group_by(m.Building.id)
+        .where(m.Building.census_block_id.is_(None))
+        .having(sa.func.count(m.CensusBlock.id) == 1)
+    )
+    values = [
+        {
+            "id": building_id,
+            "census_block_id": census_block_id,
+        }
+        for building_id, census_block_id in session.execute(query)
+    ]
+    click.secho(f"Updating {len(values)} rows...", fg="blue")
+    session.execute(
+        sa.update(m.Building),
+        values,
+    )
+    unjoined_count = session.execute(
+        sa.select(sa.func.count())
+        .select_from(m.Building)
+        .where(m.Building.census_block_id.is_(None))
+    ).scalar()
+    if unjoined_count > 0:
+        click.secho(
+            f"{unjoined_count} buildings could not be joined to parcels.", fg="yellow"
+        )
+
+
 @click.command(
     "join", help="Fill in foreign key columns by joining data from other tables."
 )

@@ -428,6 +428,10 @@ class Building(PublicBase):
     parcel_id: Mapped[int] = mapped_column(sa.ForeignKey("parcel.id"), nullable=True)
     parcel = relationship("Parcel", back_populates="buildings")
 
+    census_block_id: Mapped[int] = mapped_column(
+        sa.ForeignKey("census_block.id"), nullable=True
+    )
+
     excluded_at: Mapped[datetime] = mapped_column(sa.DateTime, nullable=True)
     exclude_reason: Mapped[str] = mapped_column(sa.String, nullable=True)
 
@@ -793,6 +797,32 @@ class UrbanMask(PublicBase):
     intptlat: Mapped[str] = mapped_column(sa.String)
     intptlon: Mapped[str] = mapped_column(sa.String)
     geometry: Mapped[Geometry] = mapped_column(Geometry("GEOMETRY", srid=DEFAULT_SRID))
+
+
+class CensusBlock(PublicBase):
+    __tablename__ = "census_block"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    statefp: Mapped[str] = mapped_column(sa.String)
+    countyfp: Mapped[str] = mapped_column(sa.String)
+    tractce: Mapped[str] = mapped_column(sa.String)
+    blockce: Mapped[str] = mapped_column(sa.String)
+    geoid: Mapped[str] = mapped_column(sa.String)
+    geoidfq: Mapped[str] = mapped_column(sa.String)
+    name: Mapped[str] = mapped_column(sa.String)
+    mtfcc: Mapped[str] = mapped_column(sa.String)
+    ur: Mapped[str] = mapped_column(sa.String)
+    uace: Mapped[int] = mapped_column(sa.Integer, nullable=True)
+    funcstat: Mapped[str] = mapped_column(sa.String)
+    aland: Mapped[int] = mapped_column(sa.BigInteger)
+    awater: Mapped[int] = mapped_column(sa.BigInteger)
+    intptlat: Mapped[str] = mapped_column(sa.String)
+    intptlon: Mapped[str] = mapped_column(sa.String)
+    housing: Mapped[int] = mapped_column(sa.Integer)
+    pop: Mapped[int] = mapped_column(sa.Integer)
+    geometry: Mapped[Geography] = mapped_column(
+        Geography("MULTIPOLYGON", srid=DEFAULT_SRID)
+    )
 
 
 class IrrAnnotation(PublicBase):
