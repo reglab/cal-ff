@@ -626,8 +626,16 @@ class Facility(PublicBase):
                 if self.construction_annotation
                 else None
             ),
-            "census_tract": self.census_tract,
-            "census_blockgroup": self.census_blockgroup,
+            "census_block": (
+                {
+                    "countyfp": self.census_block.countyfp,
+                    "tractce": self.census_block.tractce,
+                    "blockce": self.census_block.blockce,
+                    "geoid": self.census_block.geoid,
+                }
+                if self.census_block
+                else None
+            ),
         }
         feature["bbox"] = list(geom.bounds)
         return feature
@@ -751,29 +759,37 @@ class Facility(PublicBase):
         )
 
     @property
+    def census_block(self):
+        from collections import Counter
+
+        counter = Counter(
+            [
+                building.census_block.geoid
+                for building in self.buildings
+                if building.census_block
+            ]
+        )
+        if not counter:
+            return None
+        geoid = counter.most_common(1)[0][0]
+        return next(
+            (
+                building.census_block
+                for building in self.buildings
+                if building.census_block.geoid == geoid
+            ),
+            None,
+        )
+
+    @property
     def census_tract(self):
         from collections import Counter
 
         counter = Counter(
             [
-                building.parcel.data.get("census_tract")
+                building.census_block.tractce
                 for building in self.buildings
-                if building.parcel
-            ]
-        )
-        if not counter:
-            return None
-        return counter.most_common(1)[0][0]
-
-    @property
-    def census_blockgroup(self):
-        from collections import Counter
-
-        counter = Counter(
-            [
-                building.parcel.data.get("census_blockgroup")
-                for building in self.buildings
-                if building.parcel
+                if building.census_block
             ]
         )
         if not counter:
