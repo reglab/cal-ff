@@ -571,6 +571,10 @@ def tf_idf_examples():
     df["Owner 1"] = df["Owner 1"].apply(lambda x: x.replace("&", r"\&"))
     df["Owner 2"] = df["Owner 2"].apply(lambda x: x.replace("&", r"\&"))
     ranges = zip(range(0, 1000, 50), range(50, 1000, 50))
+
+    # filter out names longer than 30 characters
+    df = df[df["Owner 1"].apply(len) < 30]
+    df = df[df["Owner 2"].apply(len) < 30]
     # sample one example from each range
     rows = []
     for low, high in ranges:
@@ -578,7 +582,9 @@ def tf_idf_examples():
             0
         ]
         rows.append(example)
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    df["TF-IDF Weight"] = df["TF-IDF Weight"].astype(int)
+    return df
 
 
 @table()
@@ -619,12 +625,18 @@ def fuzzy_examples():
     df["Owner 1"] = df["Owner 1"].apply(lambda x: x.replace("&", r"\&"))
     df["Owner 2"] = df["Owner 2"].apply(lambda x: x.replace("&", r"\&"))
     ranges = zip(range(0, 1000, 50), range(50, 1000, 50))
+
+    df = df[df["Owner 1"].apply(len) < 30]
+    df = df[df["Owner 2"].apply(len) < 30]
     # sample one example from each range
     rows = []
     for low, high in ranges:
         example = df[(df["Fuzzy Weight"] >= low) & (df["Fuzzy Weight"] < high)].iloc[0]
         rows.append(example)
-    return pd.DataFrame(rows)
+
+    df = pd.DataFrame(rows)
+    df["Fuzzy Weight"] = df["Fuzzy Weight"].astype(int)
+    return df
 
 
 @table()
@@ -635,8 +647,15 @@ def parcel_name_overrides():
             m.ParcelOwnerNameAnnotation.matched
         )
     ).all()
+    rows = {tuple(sorted((row.owner_name, row.related_owner_name))) for row in rows}
     df = pd.DataFrame(
-        [{"Owner 1": row.owner_name, "Owner 2": row.related_owner_name} for row in rows]
+        [
+            {
+                "Owner 1": row[0],
+                "Owner 2": row[1],
+            }
+            for row in rows
+        ]
     )
     df["Owner 1"] = df["Owner 1"].apply(lambda x: x.replace("&", r"\&"))
     df["Owner 2"] = df["Owner 2"].apply(lambda x: x.replace("&", r"\&"))
