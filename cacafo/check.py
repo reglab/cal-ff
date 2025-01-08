@@ -307,29 +307,49 @@ def cafos_with_no_animal_type(verbose=False):
     session = new_session()
     facilities = (
         session.execute(
-            sa.select(m.Facility)
-            .options(
-                sa.orm.joinedload(m.Facility.all_cafo_annotations),
-            )
-            .options(
-                sa.orm.joinedload(m.Facility.all_animal_type_annotations),
-            )
-            .options(
-                sa.orm.joinedload(m.Facility.best_permits),
-            )
-            .where(m.Facility.archived_at.is_(None))
+            cacafo.query.cafos()
+            .options(sa.orm.joinedload(m.Facility.all_animal_type_annotations))
+            .options(sa.orm.joinedload(m.Facility.best_permits))
         )
         .unique()
         .scalars()
         .all()
     )
     for facility in facilities:
-        if facility.is_cafo and not facility.animal_types:
+        if not facility.animal_types:
             if verbose:
-                rich.print(
-                    f"[yellow]Facility {facility.id} has no AnimalTypeAnnotations[/yellow]"
+                location = (
+                    facility.shp_geometry.centroid.y,
+                    facility.shp_geometry.centroid.x,
                 )
-    return len([f for f in facilities if f.is_cafo and not f.animal_types])
+                rich.print(
+                    f"[yellow]Facility {facility.id} {location} has no animal type[/yellow]"
+                )
+    return len([f for f in facilities if not f.animal_types])
+
+
+@check()
+def facilities_with_best_permit_match(verbose=False):
+    session = new_session()
+    facilities = (
+        session.execute(
+            cacafo.query.cafos().options(sa.orm.joinedload(m.Facility.best_permits))
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+    for facility in facilities:
+        if facility.best_permits:
+            if verbose:
+                location = (
+                    facility.shp_geometry.centroid.y,
+                    facility.shp_geometry.centroid.x,
+                )
+                rich.print(
+                    f"[blue]Facility {facility.id} {location} has a best permit match[/blue]"
+                )
+    return len([f for f in facilities if f.best_permits])
 
 
 @check(expected=lambda value: value > 2200 and value < 2500)
@@ -519,6 +539,52 @@ def positive_images_within_urban_mask(verbose=False):
                 f"[yellow]Image {positive_images[ui].id} {image_location} intersects with urban mask[/yellow]"
             )
     return len(positive_image_ids)
+
+
+@check(expected=0)
+def facilities_within_urban_mask(verbose=False):
+    session = new_session()
+    urban_mask = session.execute(sa.select(m.UrbanMask)).scalars().all()
+    subquery = cacafo.query.positive_images()
+    positive_images = (
+        session.execute(
+            sa.select(m.Image).where(m.Image.id.in_(sa.select(subquery.c.id)))
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+    urban_mask_geoms = [ga.shape.to_shape(um.geometry) for um in urban_mask]
+    urban_mask_tree = STRtree(urban_mask_geoms)
+    positive_image_geoms = [ga.shape.to_shape(ui.geometry) for ui in positive_images]
+    positive_image_ids, urban_mask_ids = urban_mask_tree.query(
+        positive_image_geoms, predicate="within"
+    )
+    images_within_urban_mask = [positive_images[ui].id for ui in positive_image_ids]
+    # get facilities on these images
+    subquery = cacafo.query.cafos()
+    facilities = (
+        session.execute(
+            sa.select(m.Facility)
+            .join(m.Building)
+            .join(m.ImageAnnotation)
+            .where(m.ImageAnnotation.image_id.in_(images_within_urban_mask))
+            .where(m.Facility.id.in_(sa.select(subquery.c.id)))
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+    for facility in facilities:
+        if verbose:
+            location = (
+                facility.shp_geometry.centroid.y,
+                facility.shp_geometry.centroid.x,
+            )
+            rich.print(
+                f"[yellow]Facility {facility.id} {location} intersects with urban mask[/yellow]"
+            )
+    return len(facilities)
 
 
 @check(

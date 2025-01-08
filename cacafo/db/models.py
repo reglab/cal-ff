@@ -169,10 +169,14 @@ class Permit(PublicBase):
 
     @property
     def shp_geocoded_address_location(self):
+        if not self.geocoded_address_location:
+            return None
         return ga.shape.to_shape(self.geocoded_address_location)
 
     @property
     def shp_registered_location(self):
+        if not self.registered_location:
+            return None
         return ga.shape.to_shape(self.registered_location)
 
     @property
@@ -681,7 +685,7 @@ class Facility(PublicBase):
         )
         if annotated_types:
             return annotated_types
-        all_cow_permits = all(
+        all_cow_permits = self.best_permits and all(
             "COW" in permit.data.get("Program", "") for permit in self.best_permits
         )
         if all_cow_permits:
@@ -776,7 +780,7 @@ class Facility(PublicBase):
             (
                 building.census_block
                 for building in self.buildings
-                if building.census_block.geoid == geoid
+                if (building.census_block and building.census_block.geoid == geoid)
             ),
             None,
         )

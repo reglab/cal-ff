@@ -69,8 +69,21 @@ def facilities_csv(session: Session, output_path: str):
 
 
 @exporter("facilities", "geojson")
-def export_geojson(session: Session, output_path: str):
-    facilities = session.execute(cacafo.query.cafos()).scalars().all()
+def facilities_geojson(session: Session, output_path: str):
+    facilities = (
+        session.execute(
+            cacafo.query.cafos().options(
+                sa.orm.selectinload(m.Facility.all_construction_annotations),
+                sa.orm.selectinload(m.Facility.all_animal_type_annotations),
+                # sa.orm.selectinload(m.Facility.best_permits),
+                # sa.orm.joinedload(m.Facility.county),
+                sa.orm.selectinload(m.Facility.all_buildings, m.Building.parcel),
+            )
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
     features = [facility.to_geojson_feature() for facility in tqdm(facilities)]
     geojson = {
         "type": "FeatureCollection",
@@ -407,6 +420,31 @@ def irr_batch(session: Session, output_path: str):
                         }
                     )
                     writer.writerow(rows[-1])
+    return rows
+
+
+@exporter("permits", "csv")
+def permits_csv(session: Session, output_path: str):
+    rows = session.execute(sa.select(m.Permit)).scalars().all()
+    rows = [
+        row.data
+        | {
+            "geocoded_address_latitude": (
+                row.shp_geocoded_address_location
+                and row.shp_geocoded_address_location.y
+            ),
+            "geocoded_address_longitude": (
+                row.shp_geocoded_address_location
+                and row.shp_geocoded_address_location.x
+            ),
+        }
+        for row in rows
+    ]
+
+    with open(output_path, "w", newline="") as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=rows[0].keys())
+        writer.writeheader()
+        writer.writerows(rows)
     return rows
 
 
