@@ -615,7 +615,7 @@ def completeness_lower_bound(verbose=False):
 def facilities_without_counties(verbose=False):
     session = new_session()
     query = sa.select(m.Facility).where(
-        m.Facility.county.is_(None) & m.Facility.archived_at.is_(None)
+        m.Facility.county_id.is_(None) & m.Facility.archived_at.is_(None)
     )
     results = session.execute(query).unique().scalars().all()
     for result in results:
