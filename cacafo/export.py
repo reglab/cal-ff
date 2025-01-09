@@ -242,6 +242,7 @@ def animal_typing_sheet(session: Session, output_path: str):
             places_to_annotate.append(
                 {
                     "annotated_before": "",
+                    "annotation_facility_hash": facility.hash,
                     "latitude": ga.shape.to_shape(facility.geometry).centroid.y,
                     "longitude": ga.shape.to_shape(facility.geometry).centroid.x,
                     "labeler": "",

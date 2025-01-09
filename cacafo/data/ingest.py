@@ -457,8 +457,8 @@ def cafo_annotation(session, file_path=None):
         ):
             if not line["is_cafo"] and not line["is_afo"]:
                 continue
-            is_afo = "n" not in line["is_afo"].lower()
-            is_cafo = is_afo and ("n" not in line["is_cafo"].lower())
+            is_afo = line["is_afo"].lower() == "true"
+            is_cafo = line["is_cafo"].lower() == "true"
             # we used to consider feedlots not CAFOs
             # but now we do
             if is_afo and "feedlot" in line["notes"].lower():
@@ -471,7 +471,8 @@ def cafo_annotation(session, file_path=None):
                     annotated_on=datetime.datetime.fromisoformat(
                         line["annotated_before"]
                     ),
-                    annotation_facility_hash=line.get("uuid"),
+                    annotation_facility_hash=line.get("annotation_facility_hash")
+                    or line.get("uuid"),
                     annotated_by=line["labeler"],
                     is_cafo=is_cafo,
                     is_afo=is_afo,
