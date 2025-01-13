@@ -220,11 +220,13 @@ def animal_type_annotations_csv(session: Session, output_path: str):
 
 @exporter("animal_typing_sheet", "csv")
 def animal_typing_sheet(session: Session, output_path: str):
+    subq = cacafo.query.cafos().subquery()
     rows = (
         session.execute(
             sa.select(
                 m.Facility,
             )
+            .join(subq, m.Facility.id == subq.c.id)
             .options(
                 sa.orm.joinedload(m.Facility.all_animal_type_annotations),
                 sa.orm.joinedload(m.Facility.all_cafo_annotations),
@@ -238,13 +240,13 @@ def animal_typing_sheet(session: Session, output_path: str):
     )
     places_to_annotate = []
     for facility in rows:
-        if facility.is_cafo and not facility.animal_types:
+        if not facility.animal_types:
             places_to_annotate.append(
                 {
                     "annotated_before": "",
                     "annotation_facility_hash": facility.hash,
-                    "latitude": ga.shape.to_shape(facility.geometry).centroid.y,
-                    "longitude": ga.shape.to_shape(facility.geometry).centroid.x,
+                    "latitude": facility.shp_geometry.centroid.y,
+                    "longitude": facility.shp_geometry.centroid.x,
                     "labeler": "",
                     "is_afo": "",
                     "is_cafo": "",

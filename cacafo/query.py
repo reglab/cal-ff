@@ -7,6 +7,7 @@ def cafos():
     return (
         sa.select(m.Facility)
         .join(m.CafoAnnotation, isouter=True)
+        .join(m.ConstructionAnnotation, isouter=True)
         .group_by(m.Facility.id)
         .having(
             (
@@ -14,6 +15,14 @@ def cafos():
                 == sa.func.count(m.CafoAnnotation.id)
             )
             | (sa.func.count(m.CafoAnnotation.id) == 0)
+        )
+        .having(
+            sa.or_(
+                sa.func.max(m.ConstructionAnnotation.destruction_upper_bound)
+                > "2017-12-31",
+                sa.func.max(m.ConstructionAnnotation.destruction_upper_bound).is_(None),
+                sa.func.count(m.ConstructionAnnotation.id) == 0,
+            )
         )
         .where(m.Facility.archived_at.is_(None))
     )
