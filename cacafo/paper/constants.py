@@ -178,7 +178,7 @@ def facilities_with_annotated_animal_type(verbose=False):
 
 @constant_method
 def population_estimate(session):
-    return "{:,}".format(len(cafos(session)))
+    return "{:,}".format(population_est())
 
 
 @constant_method
