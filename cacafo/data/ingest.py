@@ -140,7 +140,10 @@ def parcel(session, file_path=None):
         for name, id in session.execute(sa.select(m.County.name, m.County.id)).all()
     }
 
-    parcels: dict[tuple[str, str], m.Parcel] = {}
+    parcels: dict[tuple[str, str], m.Parcel] = {
+        (p.county.name, p.number): p
+        for p in session.execute(sa.select(m.Parcel)).scalars().all()
+    }
 
     path = file_path or cacafo.data.source.get("parcels.csv")
     with open(path) as f:
@@ -150,6 +153,8 @@ def parcel(session, file_path=None):
             if isinstance(data, str):
                 # some data is double-quoted bc of json->csv
                 data = json.loads(data)
+            if (line["county_name"], line["numb"]) in parcels:
+                continue
             parcel = m.Parcel(
                 owner=line["owner"],
                 address=line["address"],
@@ -193,31 +198,33 @@ def parcel(session, file_path=None):
                 county = possible_parcels[0][0]
             if (county, number) not in parcels:
                 continue
-            if parcels[(county, number)].inferred_geometry is not None:
+            if parcels[(county, number)].shp_inferred_geometry is not None:
                 # merge the two geometries
-                parcels[(county, number)].inferred_geometry = parcels[
+                parcels[(county, number)].shp_inferred_geometry = parcels[
                     (county, number)
-                ].inferred_geometry.union(shp.geometry.Point(float(lon), float(lat)))
+                ].shp_inferred_geometry.union(
+                    shp.geometry.Point(float(lon), float(lat))
+                )
             else:
-                parcels[(county, number)].inferred_geometry = shp.geometry.Point(
+                parcels[(county, number)].shp_inferred_geometry = shp.geometry.Point(
                     float(lon), float(lat)
                 )
     for parcel in rich.progress.track(
         parcels.values(), description="Processing geometries"
     ):
-        if not parcel.inferred_geometry:
+        if not parcel.shp_inferred_geometry:
             continue
         # transform to meters, buffer, hull, transform back to latlon
-        original_geometry = parcel.inferred_geometry
-        points_in_meters = cacafo.transform.to_meters(parcel.inferred_geometry)
+        original_geometry = parcel.shp_inferred_geometry
+        points_in_meters = cacafo.transform.to_meters(parcel.shp_inferred_geometry)
         buffer = points_in_meters.buffer(5)
         convex_hull = buffer.convex_hull
-        parcel.inferred_geometry = cacafo.transform.to_wgs(convex_hull)
+        parcel.shp_inferred_geometry = cacafo.transform.to_wgs(convex_hull)
 
-        assert shp.geometry.shape(parcel.inferred_geometry).is_valid
-        assert shp.geometry.shape(parcel.inferred_geometry).contains(original_geometry)
-
-        parcel.inferred_geometry = parcel.inferred_geometry.wkt
+        assert shp.geometry.shape(parcel.shp_inferred_geometry).is_valid
+        assert shp.geometry.shape(parcel.shp_inferred_geometry).contains(
+            original_geometry
+        )
 
     session.add_all(parcels.values())
 
@@ -438,6 +445,7 @@ def animal_type_annotation(session, file_path=None):
                         ),
                         annotated_by=line["labeler"],
                         notes=line["notes"] or "",
+                        annotation_facility_hash=line.get("annotation_facility_hash"),
                     )
                 )
         session.add_all(animal_types)
@@ -457,8 +465,8 @@ def cafo_annotation(session, file_path=None):
         ):
             if not line["is_cafo"] and not line["is_afo"]:
                 continue
-            is_afo = "n" not in line["is_afo"].lower()
-            is_cafo = is_afo and ("n" not in line["is_cafo"].lower())
+            is_afo = line["is_afo"].lower() == "true"
+            is_cafo = line["is_cafo"].lower() == "true"
             # we used to consider feedlots not CAFOs
             # but now we do
             if is_afo and "feedlot" in line["notes"].lower():
@@ -471,7 +479,8 @@ def cafo_annotation(session, file_path=None):
                     annotated_on=datetime.datetime.fromisoformat(
                         line["annotated_before"]
                     ),
-                    annotation_facility_hash=line.get("uuid"),
+                    annotation_facility_hash=line.get("annotation_facility_hash")
+                    or line.get("uuid"),
                     annotated_by=line["labeler"],
                     is_cafo=is_cafo,
                     is_afo=is_afo,

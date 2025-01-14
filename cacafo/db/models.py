@@ -122,6 +122,18 @@ class Parcel(PublicBase):
     def permits(self):
         return self.registered_location_permits + self.geocoded_address_location_permits
 
+    @property
+    def shp_inferred_geometry(self):
+        if not self.inferred_geometry:
+            return None
+        if isinstance(self.inferred_geometry, str):
+            return wkt.loads(self.inferred_geometry)
+        return ga.shape.to_shape(self.inferred_geometry)
+
+    @shp_inferred_geometry.setter
+    def shp_inferred_geometry(self, value):
+        self.inferred_geometry = value.wkt
+
     __table_args__ = (sa.UniqueConstraint("number", "county_id"),)
 
 
@@ -369,7 +381,7 @@ class AnimalTypeAnnotation(PublicBase):
     id: Mapped[int] = mapped_column(primary_key=True)
     animal_type: Mapped[str]
     """the uuid of the facility that was originally annotated"""
-    labeled_facility_uuid: Mapped[str] = mapped_column(sa.String, nullable=True)
+    annotation_facility_hash: Mapped[str] = mapped_column(sa.String, nullable=True)
     location: Mapped[Geography] = mapped_column(Geography("POINT", srid=DEFAULT_SRID))
     annotated_on: Mapped[datetime] = mapped_column(sa.DateTime)
     annotated_by: Mapped[str] = mapped_column(sa.String)
@@ -724,7 +736,18 @@ class Facility(PublicBase):
 
     @property
     def is_cafo(self):
-        return all([annotation.is_cafo for annotation in self.all_cafo_annotations])
+        return (
+            all([annotation.is_cafo for annotation in self.all_cafo_annotations])
+            # 2017-12-31
+            and all(
+                [
+                    construction_annotation.destruction_upper_bound is None
+                    or construction_annotation.destruction_upper_bound
+                    > datetime.fromisoformat("2017-12-31")
+                    for construction_annotation in self.all_construction_annotations
+                ]
+            )
+        )
 
     @property
     def is_afo(self):

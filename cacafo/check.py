@@ -4,6 +4,7 @@ import geoalchemy2 as ga
 import rich
 import rich.progress
 import rich_click as click
+import shapely as shp
 import sqlalchemy as sa
 from shapely import STRtree
 
@@ -527,18 +528,25 @@ def positive_images_within_urban_mask(verbose=False):
     urban_mask_tree = STRtree(urban_mask_geoms)
     positive_image_geoms = [ga.shape.to_shape(ui.geometry) for ui in positive_images]
     positive_image_ids, urban_mask_ids = urban_mask_tree.query(
-        positive_image_geoms, predicate="within"
+        positive_image_geoms, predicate="intersects"
     )
-    for ui in positive_image_ids:
-        if verbose:
-            image_location = (
-                ga.shape.to_shape(positive_images[ui].geometry).centroid.y,
-                ga.shape.to_shape(positive_images[ui].geometry).centroid.x,
-            )
-            rich.print(
-                f"[yellow]Image {positive_images[ui].id} {image_location} intersects with urban mask[/yellow]"
-            )
-    return len(positive_image_ids)
+    images_intersecting_with_urban_mask = [
+        positive_images[ui] for ui in positive_image_ids
+    ]
+
+    union_urban_mask_geom = shp.ops.unary_union(urban_mask_geoms)
+    images_within_urban_mask = []
+    for image in images_intersecting_with_urban_mask:
+        if (
+            image.shp_geometry.area * 0.7
+            < shp.intersection(image.shp_geometry, union_urban_mask_geom).area
+        ):
+            images_within_urban_mask.append(image.id)
+            if verbose:
+                rich.print(
+                    f"[yellow]Image {image.id} intersects with urban mask[/yellow]"
+                )
+    return len(images_within_urban_mask)
 
 
 @check(expected=0)
@@ -558,9 +566,20 @@ def facilities_within_urban_mask(verbose=False):
     urban_mask_tree = STRtree(urban_mask_geoms)
     positive_image_geoms = [ga.shape.to_shape(ui.geometry) for ui in positive_images]
     positive_image_ids, urban_mask_ids = urban_mask_tree.query(
-        positive_image_geoms, predicate="within"
+        positive_image_geoms, predicate="intersects"
     )
-    images_within_urban_mask = [positive_images[ui].id for ui in positive_image_ids]
+    images_intersecting_with_urban_mask = [
+        positive_images[ui] for ui in positive_image_ids
+    ]
+
+    union_urban_mask_geom = shp.ops.unary_union(urban_mask_geoms)
+    images_within_urban_mask = []
+    for image in images_intersecting_with_urban_mask:
+        if (
+            image.shp_geometry.area * 0.7
+            < shp.intersection(image.shp_geometry, union_urban_mask_geom).area
+        ):
+            images_within_urban_mask.append(image.id)
     # get facilities on these images
     subquery = cacafo.query.cafos()
     facilities = (
@@ -568,8 +587,21 @@ def facilities_within_urban_mask(verbose=False):
             sa.select(m.Facility)
             .join(m.Building)
             .join(m.ImageAnnotation)
-            .where(m.ImageAnnotation.image_id.in_(images_within_urban_mask))
             .where(m.Facility.id.in_(sa.select(subquery.c.id)))
+            .group_by(m.Facility.id)
+            # having all images in the urban mask
+            .having(
+                sa.func.count(m.ImageAnnotation.id)
+                == sa.func.sum(
+                    sa.case(
+                        (
+                            m.ImageAnnotation.image_id.in_(images_within_urban_mask),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                )
+            )
         )
         .unique()
         .scalars()
@@ -585,6 +617,34 @@ def facilities_within_urban_mask(verbose=False):
                 f"[yellow]Facility {facility.id} {location} intersects with urban mask[/yellow]"
             )
     return len(facilities)
+
+
+@check()
+def urban_masks_applied(verbose=False):
+    # retrieve all urban masks where all iamges within them are removed
+    session = new_session()
+    urban_masks = session.execute(sa.select(m.UrbanMask)).scalars().all()
+    images = session.execute(sa.select(m.Image)).scalars().all()
+    urban_mask_geoms = [ga.shape.to_shape(um.geometry) for um in urban_masks]
+    urban_mask_tree = STRtree(urban_mask_geoms)
+    image_geoms = [ga.shape.to_shape(i.geometry) for i in images]
+    image_idxs, urban_mask_idxs = urban_mask_tree.query(image_geoms, predicate="within")
+    urban_mask_to_image = {}
+    for image_idx, urban_mask_idx in zip(image_idxs, urban_mask_idxs):
+        urban_mask = urban_masks[urban_mask_idx]
+        if urban_mask not in urban_mask_to_image:
+            urban_mask_to_image[urban_mask] = []
+        urban_mask_to_image[urban_mask].append(images[image_idx])
+
+    applied_urban_masks = []
+    for urban_mask, images in urban_mask_to_image.items():
+        if all(image.bucket is None for image in images):
+            applied_urban_masks.append(urban_mask)
+            if verbose:
+                rich.print(
+                    f"[yellow]Urban mask {urban_mask} has all images within it removed[/yellow]"
+                )
+    return len(applied_urban_masks)
 
 
 @check(
