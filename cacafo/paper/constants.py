@@ -178,7 +178,13 @@ def facilities_with_annotated_animal_type(verbose=False):
 
 @constant_method
 def population_estimate(session):
-    return "{:,}".format(population_est())
+    img_est = population_est()
+    ftir = (
+        session.execute(cacafo.stats.population.number_of_images_per_facility())
+        .scalars()
+        .one()
+    )
+    return "{:,.2f}".format(img_est / ftir)
 
 
 @constant_method
@@ -287,7 +293,7 @@ def no_animal_count_permits(session):
 
 @constant_method
 def fac_to_im_ratio(session):
-    return "{:.5f}".format(
+    return "{:.2f}".format(
         session.execute(cacafo.stats.population.number_of_images_per_facility())
         .scalars()
         .one()
