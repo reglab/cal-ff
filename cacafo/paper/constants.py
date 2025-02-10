@@ -181,7 +181,7 @@ def population_estimate(session):
         .scalars()
         .one()
     )
-    return "{:,.2f}".format(img_est / ftir)
+    return "{:,.2f}".format((img_est / ftir).point)
 
 
 @constant_method

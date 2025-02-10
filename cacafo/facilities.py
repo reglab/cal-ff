@@ -296,4 +296,5 @@ def archive_facilities_cli():
             m.Facility.archived_at == archived_at
         )
     ).scalar()
+    session.commit()
     click.secho(f"Archived {count} facilities", fg="green")
