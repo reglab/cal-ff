@@ -8,6 +8,7 @@ import shapely as shp
 import shapely.wkt as wkt
 import sqlalchemy as sa
 from geoalchemy2 import Geography, Geometry
+from rl.utils.logger import LOGGER
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, declarative_base, mapped_column, relationship
 
@@ -511,6 +512,10 @@ class Building(PublicBase):
         feature["bbox"] = list(geom.bounds)
         return feature
 
+    @property
+    def image(self):
+        return self.image_annotation.image
+
 
 class BuildingRelationship(PublicBase):
     __tablename__ = "building_relationship"
@@ -801,6 +806,18 @@ class Facility(PublicBase):
         if not counter:
             return None
         geoid = counter.most_common(1)[0][0]
+
+        # Get all of the most common geoids
+        max_occurence = counter.most_common(1)[0][1]
+        geoids = [geoid for geoid, count in counter.items() if count == max_occurence]
+
+        if (len(counter) > 1) and (
+            counter.most_common(2)[0][1] == counter.most_common(2)[1][1]
+        ):
+            LOGGER.warning("Multiple census blocks for facility %s", self.id)
+            # hash each census block, sort, and choose the first
+            geoids = sorted(geoids, key=lambda x: hashlib.md5(x.encode()).hexdigest())
+            geoid = geoids[0]
         return next(
             (
                 building.census_block
@@ -823,6 +840,10 @@ class Facility(PublicBase):
         )
         if not counter:
             return None
+        if (len(counter) > 1) and (
+            counter.most_common(2)[0][1] == counter.most_common(2)[1][1]
+        ):
+            LOGGER.warning("Multiple census tracts for facility %s", self.id)
         return counter.most_common(1)[0][0]
 
 

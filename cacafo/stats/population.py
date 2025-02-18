@@ -128,6 +128,13 @@ class Estimate:
                 lower=self.lower + other,
                 upper=self.upper + other,
             )
+        else:
+            other = float(other)
+            return Estimate(
+                point=self.point + other,
+                lower=self.lower + other,
+                upper=self.upper + other,
+            )
         raise NotImplementedError
 
     def __sub__(self, other):
@@ -149,13 +156,13 @@ class Estimate:
         raise NotImplementedError
 
     def __truediv__(self, other):
-        if isinstance(other, (int, float)):
-            return Estimate(
-                point=self.point / other,
-                lower=self.lower / other,
-                upper=self.upper / other,
-            )
-        raise NotImplementedError
+        if isinstance(other, Estimate):
+            raise NotImplementedError
+        return Estimate(
+            point=self.point / other,
+            lower=self.lower / other,
+            upper=self.upper / other,
+        )
 
     def __rtruediv__(self, other):
         if isinstance(other, (int, float)):

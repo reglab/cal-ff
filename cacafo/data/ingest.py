@@ -573,6 +573,9 @@ def building(session, file_path=None):
         buildings,
     )
     session.commit()
+    from cluster.exclude_overlapping import exclude_overlapping_buildings
+
+    exclude_overlapping_buildings(session)
 
 
 @ingestor(m.UrbanMask)

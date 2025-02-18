@@ -1,3 +1,4 @@
+import csv
 import inspect
 
 import geoalchemy2 as ga
@@ -8,6 +9,7 @@ import shapely as shp
 import sqlalchemy as sa
 from shapely import STRtree
 
+import cacafo.data.source
 import cacafo.db.models as m
 import cacafo.query
 import cacafo.stats.population
@@ -565,16 +567,17 @@ def facilities_within_urban_mask(verbose=False):
     urban_mask_geoms = [ga.shape.to_shape(um.geometry) for um in urban_mask]
     urban_mask_tree = STRtree(urban_mask_geoms)
     positive_image_geoms = [ga.shape.to_shape(ui.geometry) for ui in positive_images]
-    positive_image_ids, urban_mask_ids = urban_mask_tree.query(
+    positive_image_idxs, urban_mask_idxs = urban_mask_tree.query(
         positive_image_geoms, predicate="intersects"
     )
-    images_intersecting_with_urban_mask = [
-        positive_images[ui] for ui in positive_image_ids
-    ]
+    images_intersecting_with_urban_mask = {
+        positive_images[pii]: urban_mask[umi]
+        for pii, umi in zip(positive_image_idxs, urban_mask_idxs)
+    }
 
     union_urban_mask_geom = shp.ops.unary_union(urban_mask_geoms)
     images_within_urban_mask = []
-    for image in images_intersecting_with_urban_mask:
+    for image, mask in images_intersecting_with_urban_mask.items():
         if (
             image.shp_geometry.area * 0.7
             < shp.intersection(image.shp_geometry, union_urban_mask_geom).area
@@ -613,38 +616,46 @@ def facilities_within_urban_mask(verbose=False):
                 facility.shp_geometry.centroid.y,
                 facility.shp_geometry.centroid.x,
             )
+            images = [b.image for b in facility.buildings]
+            urban_masks = {images_intersecting_with_urban_mask[i].name for i in images}
             rich.print(
-                f"[yellow]Facility {facility.id} {location} intersects with urban mask[/yellow]"
+                f"[yellow]Facility {facility.id} {location} intersects with urban mask(s) {urban_masks}[/yellow]"
             )
     return len(facilities)
 
 
 @check()
-def urban_masks_applied(verbose=False):
-    # retrieve all urban masks where all iamges within them are removed
+def urban_masks_originally_not_applied(verbose=False):
+    # retrieve all urban masks where all images originally within them are not removed
     session = new_session()
     urban_masks = session.execute(sa.select(m.UrbanMask)).scalars().all()
-    images = session.execute(sa.select(m.Image)).scalars().all()
+    image_csv = cacafo.data.source.get("images.csv")
+    with open(image_csv, "r") as f:
+        image_geometries = [
+            shp.box(
+                float(row["lon_min"]),
+                float(row["lat_min"]),
+                float(row["lon_max"]),
+                float(row["lat_max"]),
+            )
+            for row in csv.DictReader(f)
+            if row["bucket"]
+        ]
     urban_mask_geoms = [ga.shape.to_shape(um.geometry) for um in urban_masks]
     urban_mask_tree = STRtree(urban_mask_geoms)
-    image_geoms = [ga.shape.to_shape(i.geometry) for i in images]
-    image_idxs, urban_mask_idxs = urban_mask_tree.query(image_geoms, predicate="within")
-    urban_mask_to_image = {}
-    for image_idx, urban_mask_idx in zip(image_idxs, urban_mask_idxs):
-        urban_mask = urban_masks[urban_mask_idx]
-        if urban_mask not in urban_mask_to_image:
-            urban_mask_to_image[urban_mask] = []
-        urban_mask_to_image[urban_mask].append(images[image_idx])
-
-    applied_urban_masks = []
-    for urban_mask, images in urban_mask_to_image.items():
-        if all(image.bucket is None for image in images):
-            applied_urban_masks.append(urban_mask)
-            if verbose:
-                rich.print(
-                    f"[yellow]Urban mask {urban_mask} has all images within it removed[/yellow]"
-                )
-    return len(applied_urban_masks)
+    image_idxs, urban_mask_idxs = urban_mask_tree.query(
+        image_geometries, predicate="within"
+    )
+    urban_mask_ids = {u.id for u in urban_masks}
+    uban_masks_with_images = {urban_masks[ui].id for ui in urban_mask_idxs}
+    urban_masks_without_images = urban_mask_ids - uban_masks_with_images
+    if verbose:
+        um_id_to_name = {um.id: um.name for um in urban_masks}
+        for um_id in urban_masks_without_images:
+            rich.print(
+                f"[yellow]Urban mask {um_id_to_name[um_id]} ({um_id}) was not applied[/yellow]"
+            )
+    return len(urban_masks_without_images)
 
 
 @check(

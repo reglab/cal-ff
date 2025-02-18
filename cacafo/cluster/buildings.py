@@ -22,6 +22,7 @@ class MemoryBuildingRelationships:
                 sa.select(m.Building.id)
                 .join(m.Parcel, isouter=True)
                 .where(m.Parcel.owner.is_(None) | (m.Parcel.owner == ""))
+                .where(m.Building.excluded_at.is_(None))
             ).all()
         )
 

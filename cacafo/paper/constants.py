@@ -1,3 +1,6 @@
+import csv
+import math
+
 import geoalchemy2 as ga
 import rich
 import rich_click as click
@@ -110,8 +113,7 @@ def num_facilities(session):
 
 
 @constant_method
-def facilities_with_no_close_permit(verbose=False):
-    session = new_session()
+def facilities_with_no_close_permit(session):
     no_close_matches = (
         session.execute(cacafo.query.unpermitted_cafos().select())
         .unique()
@@ -122,8 +124,7 @@ def facilities_with_no_close_permit(verbose=False):
 
 
 @constant_method
-def facilities_with_no_close_registered_permit(verbose=False):
-    session = new_session()
+def facilities_with_no_close_registered_permit(session):
     # get permits more than 1km from any cafo
     permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
     facilities = cafos(session)
@@ -145,32 +146,28 @@ def facilities_with_no_close_registered_permit(verbose=False):
 
 
 @constant_method
-def facilities_with_no_best_permit(verbose=False):
-    session = new_session()
+def facilities_with_no_best_permit(session):
     facilities = cafos(session)
     no_best_permits = sum(1 for f in facilities if not f.best_permits)
     return "{:,}".format(no_best_permits)
 
 
 @constant_method
-def facilities_with_best_permit(verbose=False):
-    session = new_session()
+def facilities_with_best_permit(session):
     facilities = cafos(session)
     best_permits = sum(1 for f in facilities if f.best_permits)
     return "{:,}".format(best_permits)
 
 
 @constant_method
-def facilities_with_permit_animal_type(verbose=False):
-    session = new_session()
+def facilities_with_permit_animal_type(session):
     facilities = cafos(session)
     only_cow_permits = [f for f in facilities if f.animal_type_source == "permit"]
     return "{:,}".format(len(only_cow_permits))
 
 
 @constant_method
-def facilities_with_annotated_animal_type(verbose=False):
-    session = new_session()
+def facilities_with_annotated_animal_type(session):
     facilities = cafos(session)
     only_cow_permits = [f for f in facilities if f.animal_type_source == "annotation"]
     return "{:,}".format(len(only_cow_permits))
@@ -184,7 +181,7 @@ def population_estimate(session):
         .scalars()
         .one()
     )
-    return "{:,}".format(round(img_est / ftir))
+    return "{:,}".format(round((img_est / ftir).point))
 
 
 @constant_method
@@ -224,6 +221,28 @@ def permits_with_no_close_facilities(session):
             unmatched_permit_ids.add(permit.id)
     no_close_matches = len(unmatched_permit_ids)
     return "{:,}".format(no_close_matches)
+
+
+@constant_method
+def permits_with_no_best_facility(session):
+    return "{:,}".format(
+        len(
+            session.execute(sa.select(m.Permit).where(m.Permit.facility_id.is_(None)))
+            .scalars()
+            .all()
+        )
+    )
+
+
+@constant_method
+def permits_with_best_facility(session):
+    return "{:,}".format(
+        len(
+            session.execute(sa.select(m.Permit).where(m.Permit.facility_id.isnot(None)))
+            .scalars()
+            .all()
+        )
+    )
 
 
 @constant_method
@@ -467,7 +486,33 @@ def total_facilities(session):
 def pct_image_labeled(session):
     subquery = cacafo.query.labeled_images().subquery()
     labeled = (
-        session.execute(sa.select(sa.func.count(subquery.c.id)).select_from(subquery))
+        session.execute(
+            sa.select(sa.func.count(m.Image.id)).where(
+                m.Image.id.in_(sa.select(subquery.c.id))
+            )
+        )
+        .scalars()
+        .one()
+    )
+    total = (
+        session.execute(
+            sa.select(sa.func.count(m.Image.id)).where(m.Image.bucket.is_not(None))
+        )
+        .scalars()
+        .one()
+    )
+    return r"{:.2f}\%".format(100 * labeled / total)
+
+
+@constant_method
+def pct_image_initially_labeled(session):
+    subquery = cacafo.query.initially_labeled_images().subquery()
+    labeled = (
+        session.execute(
+            sa.select(sa.func.count(m.Image.id)).where(
+                m.Image.id.in_(sa.select(subquery.c.id))
+            )
+        )
         .scalars()
         .one()
     )
@@ -662,6 +707,169 @@ def removed_pct_typing(session):
     n_removed = int(removed_facilities_typing(session).replace(",", ""))
     n_total = int(total_facilities(session).replace(",", ""))
     return "{:.2f}\\%".format(100 * n_removed / n_total)
+
+
+_FACILITIES_WITHIN_URBAN_MASK = None
+
+
+def _facilities_within_urban_mask(session):
+    global _FACILITIES_WITHIN_URBAN_MASK
+    if _FACILITIES_WITHIN_URBAN_MASK is None:
+        urban_mask = session.execute(sa.select(m.UrbanMask)).scalars().all()
+        subquery = cacafo.query.positive_images()
+        positive_images = (
+            session.execute(
+                sa.select(m.Image).where(m.Image.id.in_(sa.select(subquery.c.id)))
+            )
+            .unique()
+            .scalars()
+            .all()
+        )
+        urban_mask_geoms = [ga.shape.to_shape(um.geometry) for um in urban_mask]
+        urban_mask_tree = shp.STRtree(urban_mask_geoms)
+        positive_image_geoms = [
+            ga.shape.to_shape(ui.geometry) for ui in positive_images
+        ]
+        positive_image_idxs, urban_mask_idxs = urban_mask_tree.query(
+            positive_image_geoms, predicate="intersects"
+        )
+        images_intersecting_with_urban_mask = {
+            positive_images[pii]: urban_mask[umi]
+            for pii, umi in zip(positive_image_idxs, urban_mask_idxs)
+        }
+
+        union_urban_mask_geom = shp.ops.unary_union(urban_mask_geoms)
+        images_within_urban_mask = []
+        for image, mask in images_intersecting_with_urban_mask.items():
+            if (
+                image.shp_geometry.area * 0.7
+                < shp.intersection(image.shp_geometry, union_urban_mask_geom).area
+            ):
+                images_within_urban_mask.append(image.id)
+        # get facilities on these images
+        subquery = cacafo.query.cafos()
+        facilities = (
+            session.execute(
+                sa.select(m.Facility)
+                .join(m.Building)
+                .join(m.ImageAnnotation)
+                .where(m.Facility.id.in_(sa.select(subquery.c.id)))
+                .group_by(m.Facility.id)
+                # having all images in the urban mask
+                .having(
+                    sa.func.count(m.ImageAnnotation.id)
+                    == sa.func.sum(
+                        sa.case(
+                            (
+                                m.ImageAnnotation.image_id.in_(
+                                    images_within_urban_mask
+                                ),
+                                1,
+                            ),
+                            else_=0,
+                        )
+                    )
+                )
+            )
+            .unique()
+            .scalars()
+            .all()
+        )
+        _FACILITIES_WITHIN_URBAN_MASK = facilities
+    return _FACILITIES_WITHIN_URBAN_MASK
+
+
+@constant_method
+def num_facilities_within_urban_mask(session):
+    facilities = _facilities_within_urban_mask(session)
+    return "{:,}".format(len(facilities))
+
+
+@constant_method
+def pct_facilities_within_urban_mask(session):
+    facilities = _facilities_within_urban_mask(session)
+    return "{:.2f}\\%".format(100 * len(facilities) / len(cafos(session)))
+
+
+@constant_method
+def num_urban_masks(session):
+    session = new_session()
+    urban_mask = session.execute(sa.select(m.UrbanMask)).scalars().all()
+    return "{:,}".format(len(urban_mask))
+
+
+_UNAPPLIED_URBAN_MASKS = None
+
+
+def _unapplied_urban_masks(session):
+    global _UNAPPLIED_URBAN_MASKS
+    if _UNAPPLIED_URBAN_MASKS is None:
+        session = new_session()
+        urban_masks = session.execute(sa.select(m.UrbanMask)).scalars().all()
+        image_csv = cacafo.data.source.get("images.csv")
+        with open(image_csv, "r") as f:
+            image_geometries = [
+                shp.box(
+                    float(row["lon_min"]),
+                    float(row["lat_min"]),
+                    float(row["lon_max"]),
+                    float(row["lat_max"]),
+                )
+                for row in csv.DictReader(f)
+                if row["bucket"]
+            ]
+        urban_mask_geoms = [ga.shape.to_shape(um.geometry) for um in urban_masks]
+        urban_mask_tree = shp.STRtree(urban_mask_geoms)
+        image_idxs, urban_mask_idxs = urban_mask_tree.query(
+            image_geometries, predicate="within"
+        )
+        urban_masks_with_images = {urban_masks[ui] for ui in urban_mask_idxs}
+        _UNAPPLIED_URBAN_MASKS = urban_masks_with_images
+    return _UNAPPLIED_URBAN_MASKS
+
+
+@constant_method
+def urban_masks_originally_not_applied(session):
+    return len(_unapplied_urban_masks(session))
+
+
+@constant_method
+def urban_mask_pct_of_state(session):
+    session = new_session()
+    urban_mask = session.execute(sa.select(m.UrbanMask)).scalars().all()
+    total_area = sum([um.shp_geometry_meters.area for um in urban_mask]) // 1_000_000
+    state_area = 423970
+    return "{:.2f}\\%".format(100 * total_area / state_area)
+
+
+@constant_method
+def urban_masks_originally_not_applied_pct_of_state(session):
+    urban_masks_with_images = _unapplied_urban_masks(session)
+    total_area = (
+        sum([um.shp_geometry_meters.area for um in urban_masks_with_images])
+        // 1_000_000
+    )
+    state_area = 423970
+    return "{:.2f}\\%".format(100 * total_area / state_area)
+
+
+@constant_method
+def expected_facilities_in_remaining_urban_mask(session):
+    facilities_in_labeled_urban_mask = _facilities_within_urban_mask(session)
+    labeled_mask_area = sum(
+        [um.shp_geometry_meters.area for um in _unapplied_urban_masks(session)]
+    )
+    total_mask_area = sum(
+        [
+            um.shp_geometry_meters.area
+            for um in session.execute(sa.select(m.UrbanMask)).scalars().all()
+        ]
+    )
+    expected_facilities = len(facilities_in_labeled_urban_mask) * (
+        1 - (labeled_mask_area / total_mask_area)
+    )
+    # round up to nearest int
+    return "{:,}".format(math.ceil(expected_facilities))
 
 
 @click.command("constants", help="Write all paper constants to file.")

@@ -1,18 +1,33 @@
 from functools import lru_cache
 
+import geoalchemy2 as ga
 import geopandas as gpd
 import networkx as nx
 import numpy as np
 import rich
 import shapely as shp
+import sqlalchemy as sa
 
 from cacafo.db.models import Building, County, Image
+from cacafo.db.session import new_session
 
 
 @lru_cache
-def mostly_overlapping_buildings():
-    buildings = Building.select().order_by(Building.id)
-    building_geoms = [b.geometry for b in buildings]
+def mostly_overlapping_buildings(session=None):
+    """Find buildings that overlap >90% with another building.
+    Returns the IDs of the smaller buildings in each overlapping pair."""
+    if session is None:
+        session = new_session()
+
+    # Get all buildings ordered by ID
+    buildings = (
+        session.execute(sa.select(Building).order_by(Building.id)).scalars().all()
+    )
+
+    # Extract geometries
+    building_geoms = [ga.shape.to_shape(b.geometry) for b in buildings]
+
+    # Create spatial index and find intersecting pairs
     tree = shp.STRtree(building_geoms)
     overlaps = tree.query(building_geoms, predicate="intersects")
     overlaps = np.vstack(
@@ -21,13 +36,15 @@ def mostly_overlapping_buildings():
             overlaps[1][overlaps[0] != overlaps[1]],
         )
     ).T
+
     redundant = []
     for idx, intersecting_idx in overlaps:
-        building_geom = shp.union_all(shp.ops.polygonize(buildings[idx].geometry))
+        building_geom = shp.union_all(shp.ops.polygonize(building_geoms[idx]))
         intersecting_building_geom = shp.union_all(
-            shp.ops.polygonize(buildings[intersecting_idx].geometry)
+            shp.ops.polygonize(building_geoms[intersecting_idx])
         )
         intersection = building_geom.intersection(intersecting_building_geom)
+
         if intersection.area > 0.9 * building_geom.area:
             building = buildings[idx]
             intersecting_building = buildings[intersecting_idx]
@@ -35,6 +52,7 @@ def mostly_overlapping_buildings():
                 redundant.append(intersecting_building.id)
             else:
                 redundant.append(building.id)
+
     return set(redundant)
 
 

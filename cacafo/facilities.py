@@ -226,6 +226,12 @@ def join_facility_counties(session=None):
             else:
                 raise ValueError(f"Could not geocode building {building.id}")
         facility.county_id = max(counties, key=counties.get)
+        # print if there are ties
+        if len(counties) > 1 and any(
+            counties[k] == counties[facility.county_id] and k != facility.county_id
+            for k in counties
+        ):
+            print(f"Tie for facility {facility.id}: {counties}")
         session.add(facility)
 
 
@@ -249,7 +255,9 @@ def create_facilities_cli():
 @_cli.command("join", help="Join annotations to facilities")
 @click.option(
     "--type",
-    type=click.Choice(["all", "cafo", "animal_type", "construction", "permits"]),
+    type=click.Choice(
+        ["all", "cafo", "animal_type", "construction", "permit", "county"]
+    ),
     default="all",
     help="Type(s) of annotation to join",
 )
@@ -263,8 +271,10 @@ def join_facilities_cli(type: str):
             join_animal_type_annotations()
         case "construction":
             join_construction_annotations()
-        case "permits":
+        case "permit":
             join_permits()
+        case "county":
+            join_facility_counties()
         case _:
             raise ValueError(f"Invalid type: {type}")
     click.echo(f"Joined {type} annotations to facilities")
@@ -286,4 +296,5 @@ def archive_facilities_cli():
             m.Facility.archived_at == archived_at
         )
     ).scalar()
+    session.commit()
     click.secho(f"Archived {count} facilities", fg="green")
