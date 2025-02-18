@@ -184,7 +184,7 @@ def population_estimate(session):
         .scalars()
         .one()
     )
-    return "{:,.2f}".format(img_est / ftir)
+    return "{:,}".format(round(img_est / ftir))
 
 
 @constant_method
@@ -308,8 +308,8 @@ def completeness_est(session):
     unseen_images_est = pop_est - survey.positive()
     unseen_facilities_est = unseen_images_est / float(fac_to_im_ratio(session))
     observed_facilities = len(cafos(session))
-    return r"{:.2f}\%".format(
-        100 * observed_facilities / (observed_facilities + unseen_facilities_est)
+    return r"{:}\%".format(
+        round(100 * observed_facilities / (observed_facilities + unseen_facilities_est))
     )
 
 
@@ -321,8 +321,8 @@ def completeness_lower(session):
     unseen_images_est = pop_est - survey.positive()
     unseen_facilities_est = unseen_images_est / float(fac_to_im_ratio(session))
     observed_facilities = len(cafos(session))
-    return r"{:.2f}\%".format(
-        100 * observed_facilities / (observed_facilities + unseen_facilities_est)
+    return r"{:}\%".format(
+        round(100 * observed_facilities / (observed_facilities + unseen_facilities_est))
     )
 
 
