@@ -2,6 +2,8 @@ import sqlalchemy as sa
 
 import cacafo.db.models as m
 
+CA_SRID = 3311
+
 
 def cafos():
     return (
@@ -75,6 +77,56 @@ def unpermitted_cafos():
         )
         .group_by(m.Facility.id)
         .having(sa.func.count(m.Permit.id) == 0)
+    )
+
+
+def permits_without_cafo():
+    cafos_subquery = cafos().subquery()
+    return (
+        sa.select(m.Permit)
+        .join(
+            m.Facility,
+            sa.or_(
+                sa.func.ST_DWithin(
+                    m.Permit.registered_location,
+                    m.Facility.geometry,
+                    1000,
+                ),
+                sa.func.ST_DWithin(
+                    m.Permit.geocoded_address_location,
+                    m.Facility.geometry,
+                    1000,
+                ),
+            ),
+            isouter=True,
+        )
+        .where(m.Facility.id.in_(sa.select(cafos_subquery.c.id)))
+        .group_by(m.Permit.id)
+        .having(sa.func.count(m.Facility.id) == 0)
+    )
+
+
+def permits_with_cafo():
+    cafos_subquery = cafos().subquery()
+    return (
+        sa.select(m.Permit)
+        .join(
+            m.Facility,
+            sa.or_(
+                sa.func.ST_DWithin(
+                    m.Permit.registered_location,
+                    m.Facility.geometry,
+                    1000,
+                ),
+                sa.func.ST_DWithin(
+                    m.Permit.geocoded_address_location,
+                    m.Facility.geometry,
+                    1000,
+                ),
+            ),
+        )
+        .where(m.Facility.id.in_(sa.select(cafos_subquery.c.id)))
+        .group_by(m.Permit.id)
     )
 
 
