@@ -124,6 +124,19 @@ def facilities_with_no_close_permit(session):
 
 
 @constant_method
+def percent_more_facilities(session):
+    no_close_matches = (
+        session.execute(cacafo.query.unpermitted_cafos().select())
+        .unique()
+        .scalars()
+        .all()
+    )
+    permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
+
+    return r"{:.1f}\%".format((len(no_close_matches) / len(permits)) * 100)
+
+
+@constant_method
 def facilities_with_no_close_registered_permit(session):
     # get permits more than 1km from any cafo
     permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
@@ -146,6 +159,15 @@ def facilities_with_no_close_registered_permit(session):
 
 
 @constant_method
+def percent_facilities_with_no_close_registered_permit(session):
+    facilities = cafos(session)
+    unpermitted = int(
+        facilities_with_no_close_registered_permit(session).replace(",", "")
+    )
+    return r"{:.1f}\%".format((unpermitted / len(facilities)) * 100)
+
+
+@constant_method
 def facilities_with_no_best_permit(session):
     facilities = cafos(session)
     no_best_permits = sum(1 for f in facilities if not f.best_permits)
@@ -153,10 +175,24 @@ def facilities_with_no_best_permit(session):
 
 
 @constant_method
+def percent_facilities_with_no_best_permit(session):
+    facilities = cafos(session)
+    no_best_permits = sum(1 for f in facilities if not f.best_permits)
+    return r"{:.1f}\%".format((no_best_permits / len(facilities)) * 100)
+
+
+@constant_method
 def facilities_with_best_permit(session):
     facilities = cafos(session)
     best_permits = sum(1 for f in facilities if f.best_permits)
     return "{:,}".format(best_permits)
+
+
+@constant_method
+def percent_facilities_with_best_permit(session):
+    facilities = cafos(session)
+    best_permits = sum(1 for f in facilities if f.best_permits)
+    return r"{:.1f}\%".format((best_permits / len(facilities)) * 100)
 
 
 @constant_method
