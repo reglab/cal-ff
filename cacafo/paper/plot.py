@@ -212,6 +212,69 @@ def facility_counts_by_county():
     return counts
 
 
+@cache
+def permit_counts_by_county():
+    session = new_session()
+    permits_w_facilites_subq = cacafo.query.permits_with_cafo().subquery()
+    permits_wout_facilites_subq = cacafo.query.permits_without_cafo().subquery()
+
+    permit_county_subq = sa.select(
+        m.Permit.id, m.Permit.data["County"].astext.label("county")
+    ).subquery()
+    # get rows of county, number of permits w/ facilities, number of permits w/out facilities
+    facility_presence_counts = session.execute(
+        sa.select(
+            permit_county_subq.c.county.label("county"),
+            sa.func.count(sa.distinct(permits_w_facilites_subq.c.id)).label(
+                "with_facility_count"
+            ),
+            sa.func.count(sa.distinct(permits_wout_facilites_subq.c.id)).label(
+                "without_facility_count"
+            ),
+        )
+        .select_from(permit_county_subq)
+        .outerjoin(
+            permits_w_facilites_subq,
+            permits_w_facilites_subq.c.id == permit_county_subq.c.id,
+        )
+        .outerjoin(
+            permits_wout_facilites_subq,
+            permits_wout_facilites_subq.c.id == permit_county_subq.c.id,
+        )
+        .group_by(permit_county_subq.c.county)
+    )
+    counts = pd.DataFrame(
+        facility_presence_counts,
+        columns=["county", "with_facility_count", "without_facility_count"],
+    )
+    counts["total_count"] = (
+        counts["with_facility_count"] + counts["without_facility_count"]
+    )
+    counts = counts.sort_values("total_count", ascending=False)
+
+    permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
+    permit_animal_counts = pd.DataFrame(
+        {
+            "id": [p.id for p in permits],
+            "county": [p.data["County"] for p in permits],
+            "animal_count": [p.animal_count for p in permits],
+        }
+    )
+    permit_animal_counts["more_than_200_animals_count"] = (
+        permit_animal_counts["animal_count"] >= 200
+    )
+    permit_animal_counts["no_animal_count"] = pd.isna(
+        permit_animal_counts["animal_count"]
+    ) | (permit_animal_counts["animal_count"] == 0)
+    county_permit_animal_counts = (
+        permit_animal_counts.groupby("county")
+        .agg({"more_than_200_animals_count": "sum", "no_animal_count": "sum"})
+        .reset_index()
+    )
+    counts = counts.merge(county_permit_animal_counts, on="county")
+    return counts
+
+
 @figure()
 def map_example_permitted_facilities():
     session = new_session()
@@ -365,6 +428,101 @@ def permitted_by_county():
         }
     )
     return sorted_counts
+
+
+@table(
+    header=tw.dedent(
+        r"""
+        \begin{tabular}{l|rr|rrrr}
+        \toprule
+         & Total & No Permit & Total & No Facility & >=200 Reported & No Animal\\
+        County & Facilities & within 1km & Permits & within 1km & Animals &  Count Reported\\
+        \midrule
+        """.strip()
+    ),
+)
+def permit_issues_by_county():
+    facility_counts = facility_counts_by_county().rename(
+        {"total_count": "total_facilities"}, axis=1
+    )
+    permit_counts = permit_counts_by_county().rename(
+        {"total_count": "total_permits"}, axis=1
+    )
+
+    sorted_counts = facility_counts.merge(permit_counts, on="county")
+    other = sorted_counts[sorted_counts["total_facilities"] < 50]
+    sorted_counts = sorted_counts[sorted_counts["total_facilities"] >= 50]
+
+    sorted_counts = pd.concat(
+        [
+            sorted_counts,
+            pd.DataFrame(
+                [
+                    {
+                        "county": "All Other",
+                        "permitted_count": other["permitted_count"].sum(),
+                        "unpermitted_count": other["unpermitted_count"].sum(),
+                        "total_facilities": other["total_facilities"].sum(),
+                        "with_facility_count": other["with_facility_count"].sum(),
+                        "without_facility_count": other["without_facility_count"].sum(),
+                        "more_than_200_animals_count": other[
+                            "more_than_200_animals_count"
+                        ].sum(),
+                        "no_animal_count": other["no_animal_count"].sum(),
+                        "total_permits": other["total_permits"].sum(),
+                    },
+                ]
+            ),
+        ]
+    )
+
+    total_row = pd.Series(
+        {
+            "county": "Total",
+            "permitted_count": sorted_counts["permitted_count"].sum(),
+            "unpermitted_count": sorted_counts["unpermitted_count"].sum(),
+            "total_facilities": sorted_counts["total_facilities"].sum(),
+            "with_facility_count": sorted_counts["with_facility_count"].sum(),
+            "without_facility_count": sorted_counts["without_facility_count"].sum(),
+            "more_than_200_animals_count": sorted_counts[
+                "more_than_200_animals_count"
+            ].sum(),
+            "no_animal_count": sorted_counts["no_animal_count"].sum(),
+            "total_permits": sorted_counts["total_permits"].sum(),
+        }
+    )
+    sorted_counts = pd.concat(
+        [
+            sorted_counts,
+            pd.DataFrame([total_row]),
+        ]
+    )
+    # rename columns
+    sorted_counts = sorted_counts.rename(
+        columns={
+            "county": "County",
+            "permitted_count": "Facilities with Permit <1km",
+            "unpermitted_count": "Facilities without Permit <1km",
+            "total_facilities": "Total Facilities",
+            "with_facility_count": "Permits with Facility <1km",
+            "without_facility_count": "Permits without Facility <1km",
+            "more_than_200_animals_count": "Permits with >=200 Animals",
+            "no_animal_count": "Permits with no Animals Reported",
+            "total_permits": "Total Permits",
+        }
+    )
+
+    return sorted_counts[
+        [
+            "County",
+            "Total Facilities",
+            "Facilities without Permit <1km",
+            "Total Permits",
+            "Permits without Facility <1km",
+            "Permits with >=200 Animals",
+            "Permits with no Animals Reported",
+        ]
+    ]
 
 
 @figure()

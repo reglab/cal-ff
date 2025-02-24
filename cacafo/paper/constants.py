@@ -232,31 +232,42 @@ def num_initially_labeled_images(session):
     )
 
 
+# @constant_method
+# def permits_with_no_close_facilities(session):
+#     permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
+#     facilities = cafos(session)
+#     facilities_tree = shp.STRtree(
+#         [to_meters(ga.shape.to_shape(f.geometry)) for f in facilities]
+#     )
+#     unmatched_permit_ids = set()
+#     for permit in permits:
+#         registered = permit.registered_location and to_meters(
+#             ga.shape.to_shape(permit.registered_location)
+#         )
+#         geocoded = permit.geocoded_address_location and to_meters(
+#             ga.shape.to_shape(permit.geocoded_address_location)
+#         )
+#         registered_close_facilities = facilities_tree.query(
+#             registered, predicate="dwithin", distance=1000
+#         )
+#         geocoded_close_facilities = facilities_tree.query(
+#             geocoded, predicate="dwithin", distance=1000
+#         )
+#         if not len(registered_close_facilities) and not len(geocoded_close_facilities):
+#             unmatched_permit_ids.add(permit.id)
+#     no_close_matches = len(unmatched_permit_ids)
+#     return "{:,}".format(no_close_matches)
+
+
 @constant_method
 def permits_with_no_close_facilities(session):
-    permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
-    facilities = cafos(session)
-    facilities_tree = shp.STRtree(
-        [to_meters(ga.shape.to_shape(f.geometry)) for f in facilities]
+    no_close_matches = (
+        session.execute(cacafo.query.permits_without_cafo().select())
+        .unique()
+        .scalars()
+        .all()
     )
-    unmatched_permit_ids = set()
-    for permit in permits:
-        registered = permit.registered_location and to_meters(
-            ga.shape.to_shape(permit.registered_location)
-        )
-        geocoded = permit.geocoded_address_location and to_meters(
-            ga.shape.to_shape(permit.geocoded_address_location)
-        )
-        registered_close_facilities = facilities_tree.query(
-            registered, predicate="dwithin", distance=1000
-        )
-        geocoded_close_facilities = facilities_tree.query(
-            geocoded, predicate="dwithin", distance=1000
-        )
-        if not len(registered_close_facilities) and not len(geocoded_close_facilities):
-            unmatched_permit_ids.add(permit.id)
-    no_close_matches = len(unmatched_permit_ids)
-    return "{:,}".format(no_close_matches)
+    return "{:,}".format(len(no_close_matches))
 
 
 @constant_method

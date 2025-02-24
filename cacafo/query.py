@@ -85,24 +85,23 @@ def permits_without_cafo():
     return (
         sa.select(m.Permit)
         .join(
-            m.Facility,
+            cafos_subquery,
             sa.or_(
                 sa.func.ST_DWithin(
                     m.Permit.registered_location,
-                    m.Facility.geometry,
+                    cafos_subquery.c.geometry,
                     1000,
                 ),
                 sa.func.ST_DWithin(
                     m.Permit.geocoded_address_location,
-                    m.Facility.geometry,
+                    cafos_subquery.c.geometry,
                     1000,
                 ),
             ),
             isouter=True,
         )
-        .where(m.Facility.id.in_(sa.select(cafos_subquery.c.id)))
         .group_by(m.Permit.id)
-        .having(sa.func.count(m.Facility.id) == 0)
+        .having(sa.func.count(cafos_subquery.c.id) == 0)
     )
 
 
@@ -111,22 +110,22 @@ def permits_with_cafo():
     return (
         sa.select(m.Permit)
         .join(
-            m.Facility,
+            cafos_subquery,
             sa.or_(
                 sa.func.ST_DWithin(
                     m.Permit.registered_location,
-                    m.Facility.geometry,
+                    cafos_subquery.c.geometry,
                     1000,
                 ),
                 sa.func.ST_DWithin(
                     m.Permit.geocoded_address_location,
-                    m.Facility.geometry,
+                    cafos_subquery.c.geometry,
                     1000,
                 ),
             ),
         )
-        .where(m.Facility.id.in_(sa.select(cafos_subquery.c.id)))
         .group_by(m.Permit.id)
+        .having(sa.func.count(cafos_subquery.c.id) > 0)
     )
 
 
