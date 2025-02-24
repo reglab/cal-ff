@@ -335,6 +335,7 @@ dependencies = [
     { name = "statsmodels" },
     { name = "thefuzz" },
     { name = "tqdm" },
+    { name = "visidata" },
 ]
 
 [package.optional-dependencies]
@@ -397,6 +398,7 @@ requires-dist = [
     { name = "statsmodels" },
     { name = "thefuzz", specifier = ">=0.22.1" },
     { name = "tqdm" },
+    { name = "visidata", specifier = ">=3.1.1" },
     { name = "visidata", marker = "extra == 'dev'", specifier = ">=3.1.1" },
 ]
 

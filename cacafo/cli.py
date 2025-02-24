@@ -60,6 +60,7 @@ def cli(log_level, debug, rich_traceback, echo_queries):
 
 @cli.command(help="Open a pgcli shell to the postgres db")
 def sql():
+    _open_tunnel()
     import subprocess
 
     from cacafo.db.session import get_postgres_uri
@@ -67,8 +68,7 @@ def sql():
     subprocess.run(["pgcli", get_postgres_uri()], check=True)
 
 
-@cli.command(help="Open a tunnel to the LCR postgres db")
-def tunnel():
+def _open_tunnel():
     import subprocess
 
     from rl.utils.io import getenv
@@ -106,8 +106,14 @@ def tunnel():
     )
 
 
+@cli.command(help="Open a tunnel to the LCR postgres db")
+def tunnel():
+    _open_tunnel()
+
+
 @cli.command(help="Open visidata view of the postgres db with the env settings")
 def vd():
+    _open_tunnel()
     import sys
 
     from cacafo.db.session import get_postgres_uri
@@ -125,6 +131,7 @@ def vd():
 # ruff: noqa: F401, F841
 @cli.command(help="Open an ipython shell with helpful project imports")
 def shell():
+    _open_tunnel()
     import hashlib
     from datetime import datetime
     from pathlib import Path

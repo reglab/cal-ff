@@ -56,6 +56,7 @@ dependencies = [
 	"pyproj>=3.6.1",
 	"more-itertools>=10.5.0",
 	"thefuzz>=0.22.1",
+	"visidata>=3.1.1",
 ]
 
 [project.optional-dependencies]
