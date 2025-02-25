@@ -80,6 +80,70 @@ def unpermitted_cafos():
     )
 
 
+def permitted_cafos_active_only():
+    cafos_subquery = cafos().subquery()
+    active_permits = (
+        sa.select(m.Permit)
+        .where(m.Permit.data["Regulatory Measure Status"].astext == "Active")
+        .subquery()
+    )
+    return (
+        sa.select(m.Facility)
+        .where(m.Facility.id.in_(sa.select(cafos_subquery.c.id)))
+        .join(
+            active_permits,
+            sa.or_(
+                sa.func.ST_DWithin(
+                    active_permits.c.registered_location,
+                    m.Facility.geometry,
+                    1000,
+                ),
+                sa.func.ST_DWithin(
+                    active_permits.c.geocoded_address_location,
+                    m.Facility.geometry,
+                    1000,
+                ),
+            ),
+        )
+        .group_by(m.Facility.id)
+    )
+
+
+def permitted_cafos_historical_only():
+    cafos_subquery = cafos().subquery()
+    active_permitted_cafos = permitted_cafos_active_only().subquery()
+    historical_permits = (
+        sa.select(m.Permit)
+        .where(m.Permit.data["Regulatory Measure Status"].astext == "Historical")
+        .subquery()
+    )
+    return (
+        sa.select(m.Facility)
+        .where(
+            sa.and_(
+                m.Facility.id.in_(sa.select(cafos_subquery.c.id)),
+                m.Facility.id.not_in(sa.select(active_permitted_cafos.c.id)),
+            )
+        )
+        .join(
+            historical_permits,
+            sa.or_(
+                sa.func.ST_DWithin(
+                    historical_permits.c.registered_location,
+                    m.Facility.geometry,
+                    1000,
+                ),
+                sa.func.ST_DWithin(
+                    historical_permits.c.geocoded_address_location,
+                    m.Facility.geometry,
+                    1000,
+                ),
+            ),
+        )
+        .group_by(m.Facility.id)
+    )
+
+
 def permits_without_cafo():
     cafos_subquery = cafos().subquery()
     return (

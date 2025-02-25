@@ -213,6 +213,64 @@ def facility_counts_by_county():
 
 
 @cache
+def facility_counts_by_county_and_program():
+    session = new_session()
+    permitted_facilities_active_subq = (
+        cacafo.query.permitted_cafos_active_only().subquery()
+    )
+    permitted_facilities_hist_subq = (
+        cacafo.query.permitted_cafos_historical_only().subquery()
+    )
+
+    unpermitted_facilities_subq = cacafo.query.unpermitted_cafos().subquery()
+    # get rows of county, number of permitted facilities, number of unpermitted facilities
+    permitted_counts = session.execute(
+        sa.select(
+            m.County.name,
+            sa.func.count(sa.distinct(permitted_facilities_active_subq.c.id)).label(
+                "active_permitted_count"
+            ),
+            sa.func.count(sa.distinct(permitted_facilities_hist_subq.c.id)).label(
+                "historical_permitted_count"
+            ),
+            sa.func.count(sa.distinct(unpermitted_facilities_subq.c.id)).label(
+                "unpermitted_count"
+            ),
+        )
+        .select_from(m.County)
+        .outerjoin(
+            permitted_facilities_active_subq,
+            permitted_facilities_active_subq.c.county_id == m.County.id,
+        )
+        .outerjoin(
+            permitted_facilities_hist_subq,
+            permitted_facilities_hist_subq.c.county_id == m.County.id,
+        )
+        .outerjoin(
+            unpermitted_facilities_subq,
+            unpermitted_facilities_subq.c.county_id == m.County.id,
+        )
+        .group_by(m.County.name)
+    )
+    counts = pd.DataFrame(
+        permitted_counts,
+        columns=[
+            "county",
+            "active_permitted_count",
+            "historical_permitted_count",
+            "unpermitted_count",
+        ],
+    )
+    counts["total_count"] = (
+        counts["active_permitted_count"]
+        + counts["historical_permitted_count"]
+        + counts["unpermitted_count"]
+    )
+    counts = counts.sort_values("total_count", ascending=False)
+    return counts
+
+
+@cache
 def permit_counts_by_county():
     session = new_session()
     permits_w_facilites_subq = cacafo.query.permits_with_cafo().subquery()
@@ -272,6 +330,171 @@ def permit_counts_by_county():
         .reset_index()
     )
     counts = counts.merge(county_permit_animal_counts, on="county")
+    return counts
+
+
+@cache
+def permit_counts_by_county_and_program():
+    session = new_session()
+    permits_w_facilites_subq = cacafo.query.permits_with_cafo().subquery()
+    active_permits_w_facilites_subq = (
+        sa.select(permits_w_facilites_subq)
+        .where(
+            permits_w_facilites_subq.c.data["Regulatory Measure Status"].astext
+            == "Active"
+            # sa.or_(
+            #     permits_w_facilites_subq.c.data['Regulatory Measure Status'].astext == 'Active',
+            #     permits_w_facilites_subq.c.data['Terimination Date'].astext.cast(sa.Date) >= '01/01/2016'
+            # )
+        )
+        .subquery()
+    )
+    historical_permits_w_facilites_subq = (
+        sa.select(permits_w_facilites_subq)
+        .where(
+            permits_w_facilites_subq.c.data["Regulatory Measure Status"].astext
+            == "Historical"
+        )
+        .subquery()
+    )
+
+    permits_wout_facilites_subq = cacafo.query.permits_without_cafo().subquery()
+    active_permits_wout_facilites_subq = (
+        sa.select(permits_wout_facilites_subq)
+        .where(
+            permits_wout_facilites_subq.c.data["Regulatory Measure Status"].astext
+            == "Active"
+            # sa.or_(
+            #     permits_wout_facilites_subq.c.data['Regulatory Measure Status'].astext == 'Active',
+            #     permits_wout_facilites_subq.c.data['Terimination Date'].astext.cast(sa.Date) >= '01/01/2016'
+            # )
+        )
+        .subquery()
+    )
+    historical_permits_wout_facilites_subq = (
+        sa.select(permits_wout_facilites_subq)
+        .where(
+            permits_wout_facilites_subq.c.data["Regulatory Measure Status"].astext
+            == "Historical"
+        )
+        .subquery()
+    )
+
+    permit_county_subq = sa.select(
+        m.Permit.id, m.Permit.data["County"].astext.label("county")
+    ).subquery()
+    # get rows of county, number of permits w/ facilities, number of permits w/out facilities
+    facility_presence_counts = session.execute(
+        sa.select(
+            permit_county_subq.c.county.label("county"),
+            sa.func.count(sa.distinct(active_permits_w_facilites_subq.c.id)).label(
+                "active_with_facility_count"
+            ),
+            sa.func.count(sa.distinct(active_permits_wout_facilites_subq.c.id)).label(
+                "active_without_facility_count"
+            ),
+            sa.func.count(sa.distinct(historical_permits_w_facilites_subq.c.id)).label(
+                "historical_with_facility_count"
+            ),
+            sa.func.count(
+                sa.distinct(historical_permits_wout_facilites_subq.c.id)
+            ).label("historical_without_facility_count"),
+        )
+        .select_from(permit_county_subq)
+        .outerjoin(
+            active_permits_w_facilites_subq,
+            active_permits_w_facilites_subq.c.id == permit_county_subq.c.id,
+        )
+        .outerjoin(
+            active_permits_wout_facilites_subq,
+            active_permits_wout_facilites_subq.c.id == permit_county_subq.c.id,
+        )
+        .outerjoin(
+            historical_permits_w_facilites_subq,
+            historical_permits_w_facilites_subq.c.id == permit_county_subq.c.id,
+        )
+        .outerjoin(
+            historical_permits_wout_facilites_subq,
+            historical_permits_wout_facilites_subq.c.id == permit_county_subq.c.id,
+        )
+        .group_by(permit_county_subq.c.county)
+    )
+    counts = pd.DataFrame(
+        facility_presence_counts,
+        columns=[
+            "county",
+            "active_with_facility_count",
+            "active_without_facility_count",
+            "historical_with_facility_count",
+            "historical_without_facility_count",
+        ],
+    )
+    counts["total_count"] = (
+        counts["active_with_facility_count"]
+        + counts["active_without_facility_count"]
+        + counts["historical_with_facility_count"]
+        + counts["historical_without_facility_count"]
+    )
+    counts["active_permits"] = (
+        counts["active_with_facility_count"] + counts["active_without_facility_count"]
+    )
+    counts["historical_permits"] = (
+        counts["historical_with_facility_count"]
+        + counts["historical_without_facility_count"]
+    )
+    counts = counts.sort_values("total_count", ascending=False)
+
+    permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
+    permit_animal_counts = pd.DataFrame(
+        {
+            "id": [p.id for p in permits],
+            "county": [p.data["County"] for p in permits],
+            "animal_count": [p.animal_count for p in permits],
+            "reg_measure_status": [
+                p.data["Regulatory Measure Status"] for p in permits
+            ],
+        }
+    )
+    permit_animal_counts["more_than_200_animals_count"] = (
+        permit_animal_counts["animal_count"] >= 200
+    )
+    permit_animal_counts["no_animal_count"] = pd.isna(
+        permit_animal_counts["animal_count"]
+    ) | (permit_animal_counts["animal_count"] == 0)
+    active_permits = permit_animal_counts[
+        permit_animal_counts["reg_measure_status"] == "Active"
+    ]
+    historical_permits = permit_animal_counts[
+        permit_animal_counts["reg_measure_status"] == "Historical"
+    ]
+
+    county_active_permit_animal_counts = (
+        active_permits.groupby("county")
+        .agg({"more_than_200_animals_count": "sum", "no_animal_count": "sum"})
+        .reset_index()
+        .rename(
+            {
+                "more_than_200_animals_count": "active_more_than_200_animals_count",
+                "no_animal_count": "active_no_animal_count",
+            },
+            axis=1,
+        )
+    )
+    county_historical_permit_animal_counts = (
+        historical_permits.groupby("county")
+        .agg({"more_than_200_animals_count": "sum", "no_animal_count": "sum"})
+        .reset_index()
+        .rename(
+            {
+                "more_than_200_animals_count": "historical_more_than_200_animals_count",
+                "no_animal_count": "historical_no_animal_count",
+            },
+            axis=1,
+        )
+    )
+    counts = counts.merge(county_active_permit_animal_counts, on="county").merge(
+        county_historical_permit_animal_counts, on="county"
+    )
     return counts
 
 
@@ -521,6 +744,166 @@ def permit_issues_by_county():
             "Permits without Facility <1km",
             "Permits with >=200 Animals",
             "Permits with no Animals Reported",
+        ]
+    ]
+
+
+@table(
+    header=tw.dedent(
+        r"""
+        \begin{tabular}{l|rrrr|rrrrr|rrrrr}
+        \toprule
+          & \multicolumn{2}{|c|}{Facilities} & & \multicolumn{5}{|c|}{Active Permits} & \multicolumn{5}{|c}{Historical Permits}\\
+         % \cline{2-7}
+        County & Total & Active Permit <1km & Historical Permit <1km & No Permit <1km & Total Permits & Total & Facility <1km & No Facility <1km & >200 Animals &  No Animal Count  & Total & Facility <1km  & No Facility <1km & >200 Animals &  No Animal Count\\
+        \hline
+        """.strip()
+    ),
+)
+def permit_issues_by_county_and_program():
+    facility_counts = facility_counts_by_county_and_program().rename(
+        {"total_count": "total_facilities"}, axis=1
+    )
+    permit_counts = permit_counts_by_county_and_program().rename(
+        {"total_count": "total_permits"}, axis=1
+    )
+
+    sorted_counts = facility_counts.merge(permit_counts, on="county")
+    sorted_counts = sorted_counts.sort_values("unpermitted_count", ascending=False)
+    other = sorted_counts[
+        (sorted_counts["unpermitted_count"] < 5)
+        & (sorted_counts["total_facilities"] < 50)
+    ]
+    sorted_counts = sorted_counts[
+        (sorted_counts["unpermitted_count"] >= 5)
+        | (sorted_counts["total_facilities"] >= 50)
+    ]
+    sorted_counts = pd.concat(
+        [
+            sorted_counts,
+            pd.DataFrame(
+                [
+                    {
+                        "county": "All Other",
+                        "active_permitted_count": other["active_permitted_count"].sum(),
+                        "historical_permitted_count": other[
+                            "historical_permitted_count"
+                        ].sum(),
+                        "unpermitted_count": other["unpermitted_count"].sum(),
+                        "total_facilities": other["total_facilities"].sum(),
+                        "active_with_facility_count": other[
+                            "active_with_facility_count"
+                        ].sum(),
+                        "active_without_facility_count": other[
+                            "active_without_facility_count"
+                        ].sum(),
+                        "historical_with_facility_count": other[
+                            "historical_with_facility_count"
+                        ].sum(),
+                        "historical_without_facility_count": other[
+                            "historical_without_facility_count"
+                        ].sum(),
+                        "active_more_than_200_animals_count": other[
+                            "active_more_than_200_animals_count"
+                        ].sum(),
+                        "active_no_animal_count": other["active_no_animal_count"].sum(),
+                        "historical_more_than_200_animals_count": other[
+                            "historical_more_than_200_animals_count"
+                        ].sum(),
+                        "historical_no_animal_count": other[
+                            "historical_no_animal_count"
+                        ].sum(),
+                        "total_permits": other["total_permits"].sum(),
+                        "active_permits": other["active_permits"].sum(),
+                        "historical_permits": other["historical_permits"].sum(),
+                    },
+                ]
+            ),
+        ]
+    )
+
+    total_row = pd.Series(
+        {
+            "county": "Total",
+            "active_permitted_count": sorted_counts["active_permitted_count"].sum(),
+            "historical_permitted_count": sorted_counts[
+                "historical_permitted_count"
+            ].sum(),
+            "unpermitted_count": sorted_counts["unpermitted_count"].sum(),
+            "total_facilities": sorted_counts["total_facilities"].sum(),
+            "active_with_facility_count": sorted_counts[
+                "active_with_facility_count"
+            ].sum(),
+            "active_without_facility_count": sorted_counts[
+                "active_without_facility_count"
+            ].sum(),
+            "historical_with_facility_count": sorted_counts[
+                "historical_with_facility_count"
+            ].sum(),
+            "historical_without_facility_count": sorted_counts[
+                "historical_without_facility_count"
+            ].sum(),
+            "active_more_than_200_animals_count": sorted_counts[
+                "active_more_than_200_animals_count"
+            ].sum(),
+            "active_no_animal_count": sorted_counts["active_no_animal_count"].sum(),
+            "historical_more_than_200_animals_count": sorted_counts[
+                "historical_more_than_200_animals_count"
+            ].sum(),
+            "historical_no_animal_count": sorted_counts[
+                "historical_no_animal_count"
+            ].sum(),
+            "total_permits": sorted_counts["total_permits"].sum(),
+            "active_permits": sorted_counts["active_permits"].sum(),
+            "historical_permits": sorted_counts["historical_permits"].sum(),
+        }
+    )
+    sorted_counts = pd.concat(
+        [
+            sorted_counts,
+            pd.DataFrame([total_row]),
+        ]
+    )
+    # rename columns
+    sorted_counts = sorted_counts.rename(
+        columns={
+            "county": "County",
+            "active_permitted_count": "Facilities with Active Permit <1km",
+            "historical_permitted_count": "Facilities with Historical Permit <1km",
+            "unpermitted_count": "Facilities without Permit <1km",
+            "total_facilities": "Total Facilities",
+            "active_with_facility_count": "Active Permits with Facility <1km",
+            "active_without_facility_count": "Active Permits without Facility <1km",
+            "active_more_than_200_animals_count": "Active Permits with >=200 Animals",
+            "active_no_animal_count": "Active Permits with no Animals Reported",
+            "historical_with_facility_count": "Historical Permits with Facility <1km",
+            "historical_without_facility_count": "Historical Permits without Facility <1km",
+            "historical_more_than_200_animals_count": "Historical Permits with >=200 Animals",
+            "historical_no_animal_count": "Historical Permits with no Animals Reported",
+            "total_permits": "Total Permits",
+            "active_permits": "Active Permits",
+            "historical_permits": "Historical Permits",
+        }
+    )
+
+    return sorted_counts[
+        [
+            "County",
+            "Total Facilities",
+            "Facilities with Active Permit <1km",
+            "Facilities with Historical Permit <1km",
+            "Facilities without Permit <1km",
+            "Total Permits",
+            "Active Permits",
+            "Active Permits with Facility <1km",
+            "Active Permits without Facility <1km",
+            "Active Permits with >=200 Animals",
+            "Active Permits with no Animals Reported",
+            "Historical Permits",
+            "Historical Permits with Facility <1km",
+            "Historical Permits without Facility <1km",
+            "Historical Permits with >=200 Animals",
+            "Historical Permits with no Animals Reported",
         ]
     ]
 
