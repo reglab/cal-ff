@@ -131,9 +131,9 @@ def percent_more_facilities(session):
         .scalars()
         .all()
     )
-    permits = session.execute(sa.select(m.Permit)).unique().scalars().all()
+    facilities = cafos(session)
 
-    return r"{:.1f}\%".format((len(no_close_matches) / len(permits)) * 100)
+    return r"{:.1f}\%".format((len(no_close_matches) / len(facilities)) * 100)
 
 
 @constant_method
@@ -504,6 +504,17 @@ def pct_ca_labeled(session):
 
 
 @constant_method
+def pct_initial_positive(session):
+    survey = img_survey()
+    # get number of positives in completed stratum and divide by total positives
+    total_positives = sum([stratum.positive for stratum in survey.strata])
+    initial_positives = sum(
+        [stratum.positive for stratum in survey.strata if stratum.name == "completed"]
+    )
+    return r"{:.3f}\%".format(100 * initial_positives / total_positives)
+
+
+@constant_method
 def total_buildings(session):
     n_buildings = (
         session.execute(sa.select(sa.func.count(m.Building.id)).select_from(m.Building))
@@ -576,6 +587,13 @@ def pct_image_initially_labeled(session):
 @constant_method
 def irr(session):
     return "{:.2f}".format(cacafo.stats.irr.label_balanced_cohens_kappa(session))
+
+
+@constant_method
+def agreement_pct(session):
+    return "{:.2f}\\%".format(
+        100 * cacafo.stats.irr.label_balanced_agreement_pct(session)
+    )
 
 
 @constant_method
@@ -917,6 +935,44 @@ def expected_facilities_in_remaining_urban_mask(session):
     )
     # round up to nearest int
     return "{:,}".format(math.ceil(expected_facilities))
+
+
+@constant_method
+def facilities_with_missing_parcel_data(session):
+    # find buildings that have no parcel data, join to facilities
+    buildings_without_parcels = (
+        sa.select(m.Building)
+        .join(m.Parcel, isouter=True)
+        .where(m.Parcel.id.is_(None))
+        .subquery()
+    )
+    cafos = cacafo.query.cafos().subquery()
+    facilities = (
+        session.execute(
+            sa.select(m.Facility)
+            .join(buildings_without_parcels)
+            .where(m.Facility.id.in_(sa.select(cafos.c.id)))
+            .group_by(m.Facility.id)
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+    return "{:,}".format(len(facilities))
+
+
+@constant_method
+def total_sampled_images(session):
+    survey = img_survey()
+    return "{:,}".format(
+        sum(
+            [
+                stratum.labeled
+                for stratum in survey.strata
+                if "0:" in stratum.name or "1:" in stratum.name
+            ]
+        )
+    )
 
 
 @click.command("constants", help="Write all paper constants to file.")

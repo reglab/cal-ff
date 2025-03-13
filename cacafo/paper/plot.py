@@ -511,7 +511,6 @@ def map_example_permitted_facilities():
     map_facilities(permitted_facilities)
 
 
-@figure()
 def map_example_unpermitted_facilities():
     session = new_session()
     unpermitted_facilities = (
@@ -917,57 +916,82 @@ def map_facility_locations():
         geometry="geometry",
         crs="EPSG:4326",
     )
-    permitted_ids = {f.id for f in session.scalars(cacafo.query.permitted_cafos())}
-    cafos = session.scalars(
-        cacafo.query.cafos().options(sa.orm.Load(m.Facility).raiseload("*"))
-    )
-    facility_gdf = gpd.GeoDataFrame(
+
+    # Get permitted and unpermitted facilities
+    permitted_facilities = session.scalars(
+        cacafo.query.permitted_cafos().options(sa.orm.Load(m.Facility).raiseload("*"))
+    ).all()
+    unpermitted_facilities = session.scalars(
+        cacafo.query.unpermitted_cafos().options(sa.orm.Load(m.Facility).raiseload("*"))
+    ).all()
+
+    # Create GeoDataFrames for both types
+    permitted_gdf = gpd.GeoDataFrame(
         [
             {
                 "id": facility.id,
                 "latitude": facility.shp_geometry.centroid.y,
                 "longitude": facility.shp_geometry.centroid.x,
-                "permitted": facility.id in permitted_ids,
                 "geometry": facility.shp_geometry.centroid,
             }
-            for facility in cafos
-        ]
-    )
-    facility_gdf.crs = "EPSG:4326"
-
-    facility_gdf["plot_permit"] = facility_gdf["permitted"].apply(
-        lambda x: "Permit <1km" if x else "No Permit <1km"
+            for facility in permitted_facilities
+        ],
+        geometry="geometry",
+        crs="EPSG:4326",
     )
 
-    base = facility_gdf.plot(
-        column="plot_permit",
-        legend=True,
+    unpermitted_gdf = gpd.GeoDataFrame(
+        [
+            {
+                "id": facility.id,
+                "latitude": facility.shp_geometry.centroid.y,
+                "longitude": facility.shp_geometry.centroid.x,
+                "geometry": facility.shp_geometry.centroid,
+            }
+            for facility in unpermitted_facilities
+        ],
+        geometry="geometry",
+        crs="EPSG:4326",
+    )
+
+    # Create a figure with two subplots side by side
+    fig, axes = plt.subplots(1, 2, figsize=(7, 3.5))
+
+    # Plot permitted facilities
+    permitted_gdf.plot(
         markersize=0.07,
         marker="o",
-        alpha=0.2,
-        categorical=True,
-        cmap="Set2",
-        vmin=0,
-        vmax=8,
-        categories=["Permit <1km", "No Permit <1km"],
-        legend_kwds={
-            "fontsize": 6,
-            "markerscale": 0.5,
-            "frameon": False,
-            "borderpad": 0.1,
-            # reduce space between markers and labels
-            "handletextpad": 0.1,
-        },
+        alpha=0.4,
+        color=sns.color_palette("Set2")[0],
+        ax=axes[0],
     )
-    base = county_gdf.plot(
+    county_gdf.plot(
         color="none",
         edgecolor="black",
         linewidth=0.2,
-        ax=base,
+        ax=axes[0],
     )
+    axes[0].set_title("Facilities with Permit <1km")
+    axes[0].set_axis_off()
 
-    plt.title("Facility Detections")
-    base.set_axis_off()
+    # Plot unpermitted facilities
+    unpermitted_gdf.plot(
+        markersize=0.07,
+        marker="o",
+        alpha=0.4,
+        color=sns.color_palette("Set2")[1],
+        ax=axes[1],
+    )
+    county_gdf.plot(
+        color="none",
+        edgecolor="black",
+        linewidth=0.2,
+        ax=axes[1],
+    )
+    axes[1].set_title("Facilities without Permit <1km")
+    axes[1].set_axis_off()
+
+    plt.tight_layout()
 
 
 def map_facilities(facilities, permit_locations=[]):

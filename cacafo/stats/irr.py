@@ -254,6 +254,29 @@ def label_balanced_cohens_kappa(session):
     return metrics.cohen_kappa_score(sample_df["is_cafo_1"], sample_df["is_cafo_2"])
 
 
+def label_balanced_agreement_pct(session):
+    class_counts = {
+        "positive": 0,
+        "labeled negative": 0,
+        "high confidence negative": 0,
+        "low confidence negative": 0,
+    }
+    map = image_category_map(session)
+    class_counts.update(
+        {v: sum(w == v for w in map.values()) for v in class_counts.keys()}
+    )
+    df = pairwise_irr_data(session)
+    pairs_by_class = {k: df[df["image_category"] == k] for k in class_counts.keys()}
+
+    random.seed(52)
+    # sample pairs proportional to class counts
+    sample = []
+    for k, v in pairs_by_class.items():
+        sample += v.sample(n=class_counts[k], replace=True).to_dict(orient="records")
+    sample_df = pd.DataFrame(sample)
+    return sum(sample_df["is_cafo_1"] == sample_df["is_cafo_2"]) / len(sample_df)
+
+
 if __name__ == "__main__":
     session = new_session()
     data = load_irr_data(session)
