@@ -588,7 +588,12 @@ class Facility(PublicBase):
         primaryjoin="Permit.facility_id == Facility.id",
     )
 
-    def to_geojson_feature(self, include_expanded_permits=False, expanded_permits=None):
+    def to_geojson_feature(
+        self,
+        include_expanded_permits=False,
+        expanded_permits=None,
+        include_parcel_owners=False,
+    ):
         geom = ga.shape.to_shape(self.geometry)
         json_geom = shp.geometry.mapping(geom)
         feature = {
@@ -621,7 +626,9 @@ class Facility(PublicBase):
             "parcels": [
                 {
                     "id": b.parcel.id,
-                    "owner": b.parcel.owner,
+                    "owner": b.parcel.owner
+                    if include_parcel_owners
+                    else "available upon request",
                     "address": b.parcel.address,
                     "number": b.parcel.number,
                     "county": b.parcel.county.name,
