@@ -362,3 +362,33 @@ def unlabeled_images():
 
 def labeled_images():
     return sa.select(m.Image).join(m.ImageAnnotation).where(m.Image.bucket.is_not(None))
+
+
+def facility_expanded_permits(facility_ids=None):
+    """
+    Returns a query to get all expanded permit matches for facilities.
+    If facility_ids is provided, only returns permits for those facilities.
+
+    This efficiently matches permits that are within 1000 meters of facility geometries.
+    """
+    query = sa.select(m.Facility.id.label("facility_id"), m.Permit).join(
+        m.Permit,
+        sa.or_(
+            sa.func.ST_DWithin(
+                m.Permit.registered_location,
+                m.Facility.geometry,
+                1000,
+            ),
+            sa.func.ST_DWithin(
+                m.Permit.geocoded_address_location,
+                m.Facility.geometry,
+                1000,
+            ),
+        ),
+        isouter=True,
+    )
+
+    if facility_ids is not None:
+        query = query.where(m.Facility.id.in_(facility_ids))
+
+    return query
