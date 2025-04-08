@@ -623,19 +623,28 @@ class Facility(PublicBase):
             "lon_min": geom.bounds[0],
             "lat_max": geom.bounds[3],
             "lon_max": geom.bounds[2],
-            "parcels": [
-                {
-                    "id": b.parcel.id,
-                    "owner": b.parcel.owner
-                    if include_parcel_owners
-                    else "available upon request",
-                    "address": b.parcel.address,
-                    "number": b.parcel.number,
-                    "county": b.parcel.county.name,
-                }
-                for b in self.buildings
-                if b.parcel
-            ],
+            "parcels": list(
+                (
+                    {
+                        b.parcel.id: {
+                            "id": b.parcel.id,
+                            "owner": b.parcel.owner
+                            if include_parcel_owners
+                            else "available upon request",
+                            "address": b.parcel.address,
+                            "number": b.parcel.number,
+                            "county": b.parcel.county.name,
+                            "data": b.parcel.data
+                            | {
+                                "owner": "available upon request",
+                                "assessee": "available upon request",
+                            },
+                        }
+                        for b in self.buildings
+                        if b.parcel
+                    }
+                ).values()
+            ),
             "best_permit_matches": [permit.data for permit in self.best_permits],
             "expanded_permit_matches": expanded_permit_data,
             "construction_annotation": (
