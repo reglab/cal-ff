@@ -393,6 +393,19 @@ def completeness_lower(session):
 
 
 @constant_method
+def completeness_upper(session):
+    survey = img_survey()
+    # this est is images population, not number of facilities
+    pop_est = survey.population().lower
+    unseen_images_est = pop_est - survey.positive()
+    unseen_facilities_est = unseen_images_est / float(fac_to_im_ratio(session))
+    observed_facilities = len(cafos(session))
+    return r"{:}\%".format(
+        round(100 * observed_facilities / (observed_facilities + unseen_facilities_est))
+    )
+
+
+@constant_method
 def FNR_est(session):
     survey = img_survey()
     survey_0 = cacafo.stats.population.Survey(
