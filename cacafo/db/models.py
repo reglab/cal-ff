@@ -1,5 +1,6 @@
 import hashlib
 import json
+import random
 from datetime import datetime
 
 import geoalchemy2 as ga
@@ -587,7 +588,12 @@ class Facility(PublicBase):
         primaryjoin="Permit.facility_id == Facility.id",
     )
 
-    def to_geojson_feature(self):
+    def to_geojson_feature(
+        self,
+        include_expanded_permits=False,
+        expanded_permits=None,
+        include_parcel_owners=False,
+    ):
         geom = ga.shape.to_shape(self.geometry)
         json_geom = shp.geometry.mapping(geom)
         feature = {
@@ -599,6 +605,15 @@ class Facility(PublicBase):
         def d2i(dt):
             return dt and dt.isoformat()
 
+        # Handle expanded permits - either use provided expanded_permits or call self.all_permits()
+        if include_expanded_permits:
+            if expanded_permits is not None:
+                expanded_permit_data = [permit.data for permit in expanded_permits]
+            else:
+                expanded_permit_data = [permit.data for permit in self.all_permits()]
+        else:
+            expanded_permit_data = None
+
         feature["properties"] = {
             "id": self.id,
             "hash": self.hash,
@@ -608,25 +623,30 @@ class Facility(PublicBase):
             "lon_min": geom.bounds[0],
             "lat_max": geom.bounds[3],
             "lon_max": geom.bounds[2],
-            "parcels": [
-                {
-                    "id": b.parcel.id,
-                    "owner": b.parcel.owner,
-                    "address": b.parcel.address,
-                    "number": b.parcel.number,
-                    "county": b.parcel.county.name,
-                }
-                for b in self.buildings
-                if b.parcel
-            ],
-            # "best_permits": [permit.data for permit in self.permits],
-            # "all_permits": [
-            #     permit.data
-            #     for building in self.buildings
-            #     for parcel in [building.parcel]
-            #     if parcel
-            #     for permit in parcel.permits
-            # ],
+            "parcels": list(
+                (
+                    {
+                        b.parcel.id: {
+                            "id": b.parcel.id,
+                            "owner": b.parcel.owner
+                            if include_parcel_owners
+                            else "available upon request",
+                            "address": b.parcel.address,
+                            "number": b.parcel.number,
+                            "county": b.parcel.county.name,
+                            "data": b.parcel.data
+                            | {
+                                "owner": "available upon request",
+                                "assessee": "available upon request",
+                            },
+                        }
+                        for b in self.buildings
+                        if b.parcel
+                    }
+                ).values()
+            ),
+            "best_permit_matches": [permit.data for permit in self.best_permits],
+            "expanded_permit_matches": expanded_permit_data,
             "construction_annotation": (
                 {
                     "id": self.construction_annotation.id,
@@ -678,10 +698,10 @@ class Facility(PublicBase):
         query = sa.select(Permit).where(
             sa.or_(
                 Permit.registered_location_parcel.has(
-                    Parcel.geometry.ST_DWithin(self.geometry, 1000)
+                    Parcel.inferred_geometry.ST_DWithin(self.geometry, 1000)
                 ),
                 Permit.geocoded_address_location_parcel.has(
-                    Parcel.geometry.ST_DWithin(self.geometry, 1000)
+                    Parcel.inferred_geometry.ST_DWithin(self.geometry, 1000)
                 ),
             )
         )
@@ -810,14 +830,15 @@ class Facility(PublicBase):
         # Get all of the most common geoids
         max_occurence = counter.most_common(1)[0][1]
         geoids = [geoid for geoid, count in counter.items() if count == max_occurence]
+        if len(geoids) > 1:
+            # raise Warning(
+            # "Multiple equal census blocks for facility {}".format(self.id)
+            # )
+            LOGGER.warning(
+                "Multiple equal census blocks for facility {}".format(self.id)
+            )
+            geoid = random.choice(geoids)
 
-        if (len(counter) > 1) and (
-            counter.most_common(2)[0][1] == counter.most_common(2)[1][1]
-        ):
-            LOGGER.warning("Multiple census blocks for facility %s", self.id)
-            # hash each census block, sort, and choose the first
-            geoids = sorted(geoids, key=lambda x: hashlib.md5(x.encode()).hexdigest())
-            geoid = geoids[0]
         return next(
             (
                 building.census_block
@@ -843,7 +864,7 @@ class Facility(PublicBase):
         if (len(counter) > 1) and (
             counter.most_common(2)[0][1] == counter.most_common(2)[1][1]
         ):
-            LOGGER.warning("Multiple census tracts for facility %s", self.id)
+            raise Warning("Multiple census tracts for facility {}".format(self.id))
         return counter.most_common(1)[0][0]
 
 

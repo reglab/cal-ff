@@ -84,7 +84,33 @@ def facilities_geojson(session: Session, output_path: str):
         .scalars()
         .all()
     )
-    features = [facility.to_geojson_feature() for facility in tqdm(facilities)]
+
+    # Get expanded permit matches for all facilities in a single query
+    facility_ids = [facility.id for facility in facilities]
+    facility_permits_map = {}
+
+    # Execute the query to get all expanded permit matches
+    expanded_permit_results = session.execute(
+        cacafo.query.facility_expanded_permits(facility_ids)
+    ).all()
+
+    # Group permits by facility_id
+    for facility_id, permit in expanded_permit_results:
+        if facility_id not in facility_permits_map:
+            facility_permits_map[facility_id] = []
+        if permit:
+            facility_permits_map[facility_id].append(permit)
+
+    # Create GeoJSON features with expanded permit matches included
+    features = []
+    for facility in tqdm(facilities):
+        expanded_permits = facility_permits_map.get(facility.id, [])
+        features.append(
+            facility.to_geojson_feature(
+                include_expanded_permits=True, expanded_permits=expanded_permits
+            )
+        )
+
     geojson = {
         "type": "FeatureCollection",
         "features": features,
