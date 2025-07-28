@@ -501,6 +501,13 @@ def positive_tiles_upper(session):
 
 
 @constant_method
+def positive_tiles_lower(session):
+    pop_lower = population_est().lower
+
+    return "{:,}".format(pop_lower)
+
+
+@constant_method
 def total_labeled(session):
     survey = img_survey()
     labeled = sum([stratum.labeled for stratum in survey.strata])
