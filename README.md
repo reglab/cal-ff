@@ -1,6 +1,7 @@
 # Cal-FF Github Repository
 
-This repository contains much of the code used to collate and curate Cal-FF.
+This repository contains much of the code used to collate and curate Cal-FF. To access the dataset, see [Huggingface](https://huggingface.co/datasets/reglab/cal-ff)
+
 
 Cal-FF is a comprehensive dataset of Concentrated Animal Feeding Operations (CAFOs) in California, compiled using satellite imagery, computer vision, and human validation. It provides an improved and near-complete census of CAFOs, addressing gaps in administrative records.
 
